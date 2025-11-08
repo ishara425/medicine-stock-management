@@ -3,6 +3,7 @@ import Distribution from "../models/Distribution.js";
 import User from "../models/User.js";
 import Medicine from "../models/Medicine.js";
 import Stock from "../models/stock.js";
+import Notification from "../models/Notification.js";
 import { Op } from "sequelize";
 
 // ✅ Get all officers (users with role "USER")
@@ -29,6 +30,8 @@ export const getMedicines = async (req, res) => {
 export const distributeMedicine = async (req, res) => {
   try {
     const { officerId, medicineId, quantity } = req.body;
+
+    
 
     // Validate input
     if (!officerId || !medicineId || !quantity) {
@@ -106,6 +109,20 @@ export const distributeMedicine = async (req, res) => {
       status: "Completed",
     });
 
+        // ✨ NEW: Create notification for officer
+    const phiUser = await User.findByPk(req.body.phiId || 1); // Get PHI from request or default
+    
+    await Notification.create({
+      officerId,
+      medicineId,
+      distributionId: distribution.id,
+      createdBy: phiUser ? phiUser.id : null,
+      type: 'Distribution',
+      status: 'Pending',
+      title: `New Medicine Distribution`,
+      message: `${quantity} units of ${medicine.name} have been distributed to you by ${phiUser ? phiUser.username : 'PHI'}.`
+    });
+
     // Fetch the complete distribution with relations
     const fullDistribution = await Distribution.findByPk(distribution.id, {
       include: [
@@ -113,6 +130,8 @@ export const distributeMedicine = async (req, res) => {
         { model: Medicine, as: "medicine", attributes: ["id", "name", "category", "dosage", "stock"] },
       ],
     });
+
+    console.log(`Distribution created and notification sent to ${officer.username}`);
 
     res.status(201).json(fullDistribution);
   } catch (error) {

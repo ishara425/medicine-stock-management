@@ -15,6 +15,9 @@ import authRoutes from "./routes/authRoutes.js";
 import medicineRoutes from "./routes/medicineRoutes.js";
 import distributionRoutes from "./routes/distributionRoutes.js";
 import stockRoutes from "./routes/stockRoutes.js";
+import officerInventoryRoutes from "./routes/officerInventoryRoutes.js";
+import restockRequestRoutes from "./routes/restockRequestRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 // Load environment variables
 dotenv.config();
@@ -64,6 +67,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/medicines", medicineRoutes);
 app.use("/api/distributions", distributionRoutes);
 app.use("/api/stock", stockRoutes);
+app.use("/api/officer-inventory", officerInventoryRoutes);
+app.use("/api/restock-requests", restockRequestRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // -----------------------------
 // Root & test DB

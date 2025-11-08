@@ -2,6 +2,8 @@
 import Distribution from "../models/Distribution.js";
 import User from "../models/User.js";
 import Medicine from "../models/Medicine.js";
+import Stock from "../models/stock.js";
+import { Op } from "sequelize";
 
 // ✅ Get all officers (users with role "USER")
 export const getOfficers = async (req, res) => {
@@ -23,18 +25,77 @@ export const getMedicines = async (req, res) => {
   }
 };
 
-// ✅ Create new distribution
+// ✅ Create new distribution (FIXED - Properly updates Stock entries using FIFO)
 export const distributeMedicine = async (req, res) => {
   try {
     const { officerId, medicineId, quantity } = req.body;
+
+    // Validate input
+    if (!officerId || !medicineId || !quantity) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    if (quantity <= 0) {
+      return res.status(400).json({ message: "Quantity must be greater than 0" });
+    }
 
     // Check if officer and medicine exist
     const officer = await User.findByPk(officerId);
     const medicine = await Medicine.findByPk(medicineId);
 
-    if (!officer || !medicine) {
-      return res.status(404).json({ message: "Officer or Medicine not found" });
+    if (!officer) {
+      return res.status(404).json({ message: "Officer not found" });
     }
+
+    if (!medicine) {
+      return res.status(404).json({ message: "Medicine not found" });
+    }
+
+    // Check if enough stock is available in Medicine table
+    if (medicine.stock < quantity) {
+      return res.status(400).json({ 
+        message: `Insufficient stock. Available: ${medicine.stock}, Requested: ${quantity}` 
+      });
+    }
+
+    // Get all stock entries for this medicine with available quantity (FIFO)
+    const stocks = await Stock.findAll({
+      where: { 
+        medicineId: medicineId,
+        quantityAvailable: { [Op.gt]: 0 }
+      },
+      order: [['receivedDate', 'ASC']] // FIFO - First In First Out
+    });
+
+    // Calculate total available quantity in Stock table
+    const totalAvailable = stocks.reduce((sum, stock) => sum + (stock.quantityAvailable || 0), 0);
+
+    if (totalAvailable < quantity) {
+      return res.status(400).json({ 
+        message: `Insufficient available stock. Total available: ${totalAvailable}, Requested: ${quantity}` 
+      });
+    }
+
+    // Distribute quantity across stock entries (FIFO)
+    let remainingQuantity = quantity;
+    
+    for (const stock of stocks) {
+      if (remainingQuantity <= 0) break;
+      
+      const deductAmount = Math.min(stock.quantityAvailable, remainingQuantity);
+      stock.quantityAvailable -= deductAmount;
+      await stock.save();
+      
+      remainingQuantity -= deductAmount;
+      
+      console.log(`Deducted ${deductAmount} from Stock ID ${stock.id}. Remaining available: ${stock.quantityAvailable}`);
+    }
+
+    // Reduce medicine stock
+    medicine.stock -= quantity;
+    await medicine.save();
+
+    console.log(`Updated Medicine ${medicine.name}. New stock: ${medicine.stock}`);
 
     // Create a new distribution
     const distribution = await Distribution.create({
@@ -45,8 +106,17 @@ export const distributeMedicine = async (req, res) => {
       status: "Completed",
     });
 
-    res.status(201).json(distribution);
+    // Fetch the complete distribution with relations
+    const fullDistribution = await Distribution.findByPk(distribution.id, {
+      include: [
+        { model: User, as: "officer", attributes: ["id", "username", "role"] },
+        { model: Medicine, as: "medicine", attributes: ["id", "name", "category", "dosage", "stock"] },
+      ],
+    });
+
+    res.status(201).json(fullDistribution);
   } catch (error) {
+    console.error("Distribution error:", error);
     res.status(500).json({ message: "Error distributing medicine", error: error.message });
   }
 };
@@ -57,8 +127,9 @@ export const getAllDistributions = async (req, res) => {
     const distributions = await Distribution.findAll({
       include: [
         { model: User, as: "officer", attributes: ["id", "username", "role"] },
-        { model: Medicine, as: "medicine", attributes: ["id", "name", "category"] },
+        { model: Medicine, as: "medicine", attributes: ["id", "name", "category", "dosage", "stock"] },
       ],
+      order: [['date', 'DESC']], // Most recent first
     });
     res.json(distributions);
   } catch (error) {

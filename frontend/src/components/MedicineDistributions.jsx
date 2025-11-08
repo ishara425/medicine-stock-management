@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, User, Pill, Send } from 'lucide-react';
+import { Calendar, User, Pill, Send, AlertCircle } from 'lucide-react';
 
 export default function MedicineDistributions() {
   const [officers, setOfficers] = useState([]);
@@ -11,6 +11,7 @@ export default function MedicineDistributions() {
     quantity: ''
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const API_BASE = 'http://localhost:8080/api';
 
@@ -23,8 +24,13 @@ export default function MedicineDistributions() {
   const fetchOfficers = async () => {
     try {
       const response = await fetch(`${API_BASE}/distributions/officers`);
-      const data = await response.json();
-      setOfficers(data);
+      if (response.ok) {
+        const data = await response.json();
+        setOfficers(data);
+        console.log('Officers loaded:', data);
+      } else {
+        console.error('Failed to fetch officers:', response.status);
+      }
     } catch (error) {
       console.error('Error fetching officers:', error);
     }
@@ -33,8 +39,13 @@ export default function MedicineDistributions() {
   const fetchMedicines = async () => {
     try {
       const response = await fetch(`${API_BASE}/distributions/medicines`);
-      const data = await response.json();
-      setMedicines(data);
+      if (response.ok) {
+        const data = await response.json();
+        setMedicines(data);
+        console.log('Medicines loaded:', data);
+      } else {
+        console.error('Failed to fetch medicines:', response.status);
+      }
     } catch (error) {
       console.error('Error fetching medicines:', error);
     }
@@ -43,57 +54,82 @@ export default function MedicineDistributions() {
   const fetchDistributions = async () => {
     try {
       const response = await fetch(`${API_BASE}/distributions`);
-      const data = await response.json();
-      setDistributions(data);
+      if (response.ok) {
+        const data = await response.json();
+        setDistributions(data);
+        console.log('Distributions loaded:', data);
+      } else {
+        console.error('Failed to fetch distributions:', response.status);
+      }
     } catch (error) {
       console.error('Error fetching distributions:', error);
     }
   };
 
   const handleDistribute = async () => {
+    setError('');
+    
+    // Validation
     if (!formData.officerId || !formData.medicineId || !formData.quantity) {
-      alert('Please fill in all fields');
+      setError('Please fill in all fields');
       return;
     }
 
     const quantity = parseInt(formData.quantity);
     if (isNaN(quantity) || quantity <= 0) {
-      alert('Please enter a valid quantity');
+      setError('Please enter a valid quantity');
+      return;
+    }
+
+    // Check if selected medicine has enough stock
+    const selectedMedicine = medicines.find(m => m.id === parseInt(formData.medicineId));
+    if (selectedMedicine && selectedMedicine.stock < quantity) {
+      setError(`Insufficient stock. Available: ${selectedMedicine.stock} units`);
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `${API_BASE}/distributions?officerId=${formData.officerId}&medicineId=${formData.medicineId}&quantity=${quantity}`,
-        { 
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        }
-      );
+      // Send distribution request with JSON body (matches your backend controller)
+      const response = await fetch(`${API_BASE}/distributions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          officerId: parseInt(formData.officerId),
+          medicineId: parseInt(formData.medicineId),
+          quantity: quantity
+        })
+      });
       
       if (response.ok) {
+        const result = await response.json();
+        console.log('Distribution successful:', result);
+        setError('');
         alert('Medicine distributed successfully!');
+        
+        // Reset form
         setFormData({ officerId: '', medicineId: '', quantity: '' });
+        
+        // Refresh data
         fetchDistributions();
-        fetchMedicines(); // Refresh medicines to show updated stock
+        fetchMedicines(); // Refresh to show updated stock
       } else {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        console.error('Request URL:', `${API_BASE}/distributions?officerId=${formData.officerId}&medicineId=${formData.medicineId}&quantity=${quantity}`);
-        alert(`Failed to distribute medicine. Check console for details.`);
+        const errorData = await response.json();
+        console.error('Distribution failed:', errorData);
+        setError(errorData.message || 'Failed to distribute medicine');
       }
     } catch (error) {
       console.error('Error distributing medicine:', error);
-      alert(`Error distributing medicine: ${error.message}`);
+      setError(`Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
   };
@@ -122,34 +158,57 @@ export default function MedicineDistributions() {
         <div className="bg-white rounded-lg shadow p-6 mb-8">
           <h2 className="text-xl font-semibold mb-6">Distribute Medicine</h2>
           
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+              <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={18} />
+              <span className="text-sm text-red-700">{error}</span>
+            </div>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Officer Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Officer Name
+                {officers.length === 0 && (
+                  <span className="text-red-500 text-xs ml-1">(No officers found)</span>
+                )}
+              </label>
               <select
                 value={formData.officerId}
                 onChange={(e) => setFormData({ ...formData, officerId: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={officers.length === 0}
               >
                 <option value="">Select Officer</option>
                 {officers.map((officer) => (
                   <option key={officer.id} value={officer.id}>
-                    {officer.username}
+                    {officer.username} (ID: {officer.id})
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Medicine</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Medicine
+                {medicines.length === 0 && (
+                  <span className="text-red-500 text-xs ml-1">(No medicines found)</span>
+                )}
+              </label>
               <select
                 value={formData.medicineId}
                 onChange={(e) => setFormData({ ...formData, medicineId: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={medicines.length === 0}
               >
                 <option value="">Select Medicine</option>
                 {medicines.map((medicine) => (
-                  <option key={medicine.id} value={medicine.id}>
-                    {medicine.name} {medicine.dosage} (Stock: {medicine.stock})
+                  <option 
+                    key={medicine.id} 
+                    value={medicine.id}
+                    disabled={medicine.stock <= 0}
+                  >
+                    {medicine.name} {medicine.dosage} (Stock: {medicine.stock}) {medicine.stock <= 0 ? '- Out of Stock' : ''}
                   </option>
                 ))}
               </select>
@@ -162,6 +221,7 @@ export default function MedicineDistributions() {
                 value={formData.quantity}
                 onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                 placeholder="Enter quantity"
+                min="1"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -169,7 +229,7 @@ export default function MedicineDistributions() {
             <div className="flex items-end">
               <button
                 onClick={handleDistribute}
-                disabled={loading}
+                disabled={loading || officers.length === 0 || medicines.length === 0}
                 className="w-full bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Send size={18} />
@@ -177,6 +237,7 @@ export default function MedicineDistributions() {
               </button>
             </div>
           </div>
+
         </div>
 
         <div className="bg-white rounded-lg shadow">

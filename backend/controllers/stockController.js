@@ -2,6 +2,7 @@
 import Stock from "../models/stock.js";
 import Medicine from "../models/Medicine.js";
 import { Op } from "sequelize";
+import sequelize from "../config/db.js";  // ✨ ADD THIS IMPORT
 
 // GET /api/stock
 export const getAllStock = async (req, res) => {
@@ -13,6 +14,63 @@ export const getAllStock = async (req, res) => {
     res.json(stocks);
   } catch (error) {
     res.status(500).json({ message: "Error fetching stock", error: error.message });
+  }
+};
+
+// ✨ NEW: GET /api/stock/consolidated - Get consolidated stock view (one row per medicine)
+export const getConsolidatedStock = async (req, res) => {
+  try {
+    const consolidatedStock = await Stock.findAll({
+      attributes: [
+        'medicineId',
+        [sequelize.fn('SUM', sequelize.col('quantity')), 'totalQuantity'],
+        [sequelize.fn('SUM', sequelize.col('quantityAvailable')), 'totalAvailable'],
+        [sequelize.fn('MAX', sequelize.col('Stock.updatedAt')), 'lastUpdated'],
+        [sequelize.fn('MIN', sequelize.col('receivedDate')), 'firstReceived'],
+      ],
+      include: [{ 
+        model: Medicine, 
+        as: "medicine",
+        attributes: ['id', 'name', 'dosage', 'category', 'stock']
+      }],
+      group: ['medicineId', 'medicine.id'],
+      order: [[sequelize.fn('MAX', sequelize.col('Stock.updatedAt')), 'DESC']]
+    });
+
+    // Format the response
+    const formattedStock = consolidatedStock.map((item, index) => ({
+      id: item.medicineId,
+      srNumber: `MED${String(index + 1).padStart(3, '0')}`,
+      medicine: item.medicine,
+      medicineName: item.medicine?.name,
+      quantity: parseInt(item.dataValues.totalQuantity) || 0,
+      quantityAvailable: parseInt(item.dataValues.totalAvailable) || 0,
+      lastUpdated: item.dataValues.lastUpdated,
+      firstReceived: item.dataValues.firstReceived
+    }));
+
+    res.json(formattedStock);
+  } catch (error) {
+    console.error("Error fetching consolidated stock:", error);
+    res.status(500).json({ message: "Error fetching consolidated stock", error: error.message });
+  }
+};
+
+// ✨ NEW: GET /api/stock/medicine/:medicineId/batches - Get all batches for a specific medicine
+export const getMedicineBatches = async (req, res) => {
+  try {
+    const { medicineId } = req.params;
+    
+    const batches = await Stock.findAll({
+      where: { medicineId: parseInt(medicineId) },
+      include: { model: Medicine, as: "medicine" },
+      order: [['receivedDate', 'DESC']]
+    });
+    
+    res.json(batches);
+  } catch (error) {
+    console.error("Error fetching medicine batches:", error);
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -37,7 +95,7 @@ export const receiveStock = async (req, res) => {
       medicineId: parseInt(medicineId),
       quantity: parseInt(quantity),
       quantityAvailable: parseInt(quantity), // Initially, all received stock is available
-      batchNumber: batchNumber || null,
+      batchNumber: batchNumber || `BATCH-${Date.now()}`, // Auto-generate if not provided
       receivedDate: receivedDate || new Date(),
       expiryDate: expiryDate || null
     });
@@ -65,27 +123,37 @@ export const receiveStock = async (req, res) => {
 // GET /api/stock/summary
 export const getStockSummary = async (req, res) => {
   try {
+    // Count unique medicines using SQL aggregation for better performance
+    const uniqueMedicines = await Stock.findAll({
+      attributes: [[sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('medicineId'))), 'count']],
+      raw: true
+    });
+    const totalMedicines = parseInt(uniqueMedicines[0]?.count) || 0;
+    
+    // Get all stocks for low stock calculation (grouped by medicine)
     const stocks = await Stock.findAll({
-      include: { model: Medicine, as: "medicine" }
+      attributes: [
+        'medicineId',
+        [sequelize.fn('SUM', sequelize.col('quantity')), 'totalQuantity'],
+        [sequelize.fn('SUM', sequelize.col('quantityAvailable')), 'totalAvailable'],
+      ],
+      group: ['medicineId']
     });
     
-    // Count unique medicines that have stock entries
-    const uniqueMedicines = new Set(stocks.map(s => s.medicineId));
-    const totalMedicines = uniqueMedicines.size;
-    
-    // Count low stock items (less than 20% available)
     const lowStockItems = stocks.filter(stock => {
-      if (stock.quantity === 0) return false;
-      const percentage = (stock.quantityAvailable / stock.quantity) * 100;
-      return percentage < 20 && stock.quantityAvailable > 0;
+      const total = parseInt(stock.dataValues.totalQuantity) || 0;
+      const available = parseInt(stock.dataValues.totalAvailable) || 0;
+      if (total === 0) return false;
+      const percentage = (available / total) * 100;
+      return percentage < 20 && available > 0;
     }).length;
 
     // Count recent updates (last 7 days)
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
-    const stockUpdates = stocks.filter(stock => 
-      new Date(stock.updatedAt) >= weekAgo
-    ).length;
+    const stockUpdates = await Stock.count({
+      where: { updatedAt: { [Op.gte]: weekAgo } }
+    });
 
     res.json({ 
       totalMedicines, 
@@ -93,6 +161,7 @@ export const getStockSummary = async (req, res) => {
       stockUpdates 
     });
   } catch (error) {
+    console.error("Error in stock summary:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -117,7 +186,6 @@ export const updateStock = async (req, res) => {
     const stock = await Stock.findByPk(req.params.id);
     if (!stock) return res.status(404).json({ message: "Stock not found" });
 
-    const oldQuantity = stock.quantity;
     const oldAvailable = stock.quantityAvailable;
 
     if (medicineId) {
@@ -131,7 +199,7 @@ export const updateStock = async (req, res) => {
     await stock.save();
 
     // If quantity changed, update Medicine total stock
-    if (req.body.quantity !== undefined || req.body.quantityAvailable !== undefined) {
+    if (req.body.quantityAvailable !== undefined) {
       const medicine = await Medicine.findByPk(stock.medicineId);
       if (medicine) {
         // Recalculate total stock from all stock entries

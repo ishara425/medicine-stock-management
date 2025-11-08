@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, TrendingDown, RefreshCw, Plus, X } from 'lucide-react';
+import { Package, TrendingDown, RefreshCw, Plus, X, List } from 'lucide-react';
 
 const StockManagementDashboard = () => {
   const [stockData, setStockData] = useState([]);
@@ -11,6 +11,9 @@ const StockManagementDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [showBatchesModal, setShowBatchesModal] = useState(false);
+  const [selectedMedicineBatches, setSelectedMedicineBatches] = useState([]);
+  const [selectedMedicineName, setSelectedMedicineName] = useState('');
   const [formData, setFormData] = useState({
     medicineId: '',
     quantity: '',
@@ -19,10 +22,8 @@ const StockManagementDashboard = () => {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  // API Base URL - Update this to your backend URL
   const API_BASE_URL = 'http://localhost:8080/api';
 
-  // Fetch medicines for dropdown
   const fetchMedicines = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/medicines`);
@@ -35,14 +36,14 @@ const StockManagementDashboard = () => {
     }
   };
 
-  // Fetch stock data
+  // Fetch consolidated stock data (one row per medicine)
   const fetchStockData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/stock`);
+      const response = await fetch(`${API_BASE_URL}/stock/consolidated`);
       if (response.ok) {
         const data = await response.json();
-        console.log('Stock data received:', data); // Debug log
+        console.log('Consolidated stock data received:', data);
         setStockData(data);
       } else {
         console.error('Failed to fetch stock data:', response.status);
@@ -54,7 +55,6 @@ const StockManagementDashboard = () => {
     }
   };
 
-  // Fetch stock summary
   const fetchStockSummary = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/stock/summary`);
@@ -71,13 +71,27 @@ const StockManagementDashboard = () => {
     }
   };
 
+  // Fetch individual batches for a medicine
+  const fetchMedicineBatches = async (medicineId, medicineName) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/stock/medicine/${medicineId}/batches`);
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedMedicineBatches(data);
+        setSelectedMedicineName(medicineName);
+        setShowBatchesModal(true);
+      }
+    } catch (error) {
+      console.error('Error fetching batches:', error);
+    }
+  };
+
   useEffect(() => {
     fetchStockData();
     fetchStockSummary();
     fetchMedicines();
   }, []);
 
-  // Calculate status percentage and color
   const getStockStatus = (received, available) => {
     if (received === 0) return { text: '0% Available', color: 'text-red-600' };
     const percentage = Math.round((available / received) * 100);
@@ -86,14 +100,12 @@ const StockManagementDashboard = () => {
     return { text: `${percentage}% Available`, color: 'text-red-600' };
   };
 
-  // Format date
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
   };
 
-  // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -102,7 +114,6 @@ const StockManagementDashboard = () => {
     }));
   };
 
-  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -132,9 +143,6 @@ const StockManagementDashboard = () => {
       );
 
       if (response.ok) {
-        console.log('Stock received successfully'); // Debug log
-        
-        // Reset form
         setFormData({
           medicineId: '',
           quantity: '',
@@ -142,11 +150,7 @@ const StockManagementDashboard = () => {
           dateReceived: new Date().toISOString().split('T')[0]
         });
         
-        // Close modal
         setShowReceiveModal(false);
-        
-        // Refresh data
-        console.log('Refreshing stock data...'); // Debug log
         await fetchStockData();
         await fetchStockSummary();
         
@@ -163,7 +167,6 @@ const StockManagementDashboard = () => {
     }
   };
 
-  // Handle modal close
   const handleCloseModal = () => {
     setShowReceiveModal(false);
     setFormData({
@@ -176,10 +179,9 @@ const StockManagementDashboard = () => {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      {/* Page Title */}
       <div className="mb-6">
         <h2 className="text-2xl font-light text-gray-800 mb-1">Stock Management</h2>
-        <p className="text-sm text-gray-500">Monitor and manage medicine inventory levels</p>
+        <p className="text-sm text-gray-500">Monitor and manage medicine inventory levels (consolidated view)</p>
       </div>
 
       {/* Summary Cards */}
@@ -189,7 +191,7 @@ const StockManagementDashboard = () => {
             <div>
               <p className="text-sm text-gray-500 mb-1">Total Medicines</p>
               <p className="text-3xl font-semibold text-gray-800">{summary.totalMedicines}</p>
-              <p className="text-xs text-gray-400 mt-1">Items in inventory</p>
+              <p className="text-xs text-gray-400 mt-1">Unique items in inventory</p>
             </div>
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
               <Package className="text-blue-600" size={20} />
@@ -224,7 +226,6 @@ const StockManagementDashboard = () => {
         </div>
       </div>
 
-      {/* Receive Stock Button */}
       <div className="mb-6">
         <button 
           onClick={() => setShowReceiveModal(true)}
@@ -238,8 +239,8 @@ const StockManagementDashboard = () => {
       {/* Stock Table */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-800">Stock Levels</h3>
-          <p className="text-sm text-gray-500">Current inventory status for all medicines</p>
+          <h3 className="text-lg font-medium text-gray-800">Stock Levels (Consolidated)</h3>
+          <p className="text-sm text-gray-500">All stock batches combined per medicine. Click "View Batches" for details.</p>
         </div>
 
         <div className="overflow-x-auto">
@@ -248,41 +249,42 @@ const StockManagementDashboard = () => {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SR Number</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Medicine Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity Received</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity Available</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Received</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Available</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
                     Loading stock data...
                   </td>
                 </tr>
               ) : stockData.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
                     No stock data available
                   </td>
                 </tr>
               ) : (
                 stockData.map((item) => {
-                  const status = getStockStatus(item.quantity, item.quantityAvailable || item.quantity);
+                  const status = getStockStatus(item.quantity, item.quantityAvailable);
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {item.srNumber || `MED${String(item.id).padStart(3, '0')}`}
+                        {item.srNumber}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {item.medicine?.name || item.medicineName || 'N/A'}
+                        {item.medicineName || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {item.quantity || 0}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {item.quantityAvailable || item.quantity || 0}
+                        {item.quantityAvailable || 0}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`text-sm font-medium ${status.color}`}>
@@ -290,7 +292,16 @@ const StockManagementDashboard = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(item.lastUpdated || item.receivedDate)}
+                        {formatDate(item.lastUpdated)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => fetchMedicineBatches(item.id, item.medicineName)}
+                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          <List size={16} />
+                          View Batches
+                        </button>
                       </td>
                     </tr>
                   );
@@ -305,25 +316,17 @@ const StockManagementDashboard = () => {
       {showReceiveModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            {/* Modal Header */}
             <div className="flex justify-between items-center p-6 border-b border-gray-200">
               <div>
                 <h2 className="text-xl font-semibold text-gray-800">Receive New Stock</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Add new medicine stock to the inventory. Fill in the details below.
-                </p>
+                <p className="text-sm text-gray-500 mt-1">Add new medicine stock batch to inventory</p>
               </div>
-              <button
-                onClick={handleCloseModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
                 <X size={24} />
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-6">
-              {/* Medicine Dropdown */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Medicine <span className="text-red-500">*</span>
@@ -344,7 +347,6 @@ const StockManagementDashboard = () => {
                 </select>
               </div>
 
-              {/* Quantity Received */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Quantity Received <span className="text-red-500">*</span>
@@ -361,22 +363,20 @@ const StockManagementDashboard = () => {
                 />
               </div>
 
-              {/* Batch/Reference Number */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Batch/Reference Number (Optional)
+                  Batch/Reference Number
                 </label>
                 <input
                   type="text"
                   name="batchNumber"
                   value={formData.batchNumber}
                   onChange={handleInputChange}
-                  placeholder="Enter batch or reference number"
+                  placeholder="Auto-generated if left empty"
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 />
               </div>
 
-              {/* Date Received */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date Received
@@ -390,7 +390,6 @@ const StockManagementDashboard = () => {
                 />
               </div>
 
-              {/* Modal Footer */}
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
@@ -409,6 +408,67 @@ const StockManagementDashboard = () => {
                   {submitting ? 'Receiving...' : 'Receive Stock'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Batches Modal */}
+      {showBatchesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-800">Stock Batches</h2>
+                <p className="text-sm text-gray-500 mt-1">{selectedMedicineName}</p>
+              </div>
+              <button
+                onClick={() => setShowBatchesModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-6">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Received</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Available</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Received</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {selectedMedicineBatches.map((batch) => {
+                    const status = getStockStatus(batch.quantity, batch.quantityAvailable);
+                    return (
+                      <tr key={batch.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">{batch.batchNumber}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{batch.quantity}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{batch.quantityAvailable}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{formatDate(batch.receivedDate)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-sm font-medium ${status.color}`}>
+                            {status.text}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowBatchesModal(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

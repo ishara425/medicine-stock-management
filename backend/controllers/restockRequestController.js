@@ -105,7 +105,9 @@ export const createRestockRequest = async (req, res) => {
       return res.status(400).json({ message: "Reason must be at least 20 characters" });
     }
 
-    if (!['Low', 'Medium', 'High'].includes(urgency)) {
+    // Normalize urgency to uppercase for consistency
+    const normalizedUrgency = urgency.toUpperCase();
+    if (!['LOW', 'MEDIUM', 'HIGH'].includes(normalizedUrgency)) {
       return res.status(400).json({ message: "Invalid urgency level" });
     }
 
@@ -128,17 +130,41 @@ export const createRestockRequest = async (req, res) => {
 
     const currentStock = inventory ? inventory.currentQuantity : 0;
 
-    // Create restock request
+    // Create restock request with UPPERCASE status
     const request = await RestockRequest.create({
       officerId,
       medicineId,
       currentStock,
       requestedQuantity,
       reason,
-      urgency,
-      status: 'Pending',
+      urgency: normalizedUrgency,
+      status: 'PENDING', // Changed from 'Pending' to 'PENDING'
       requestDate: new Date()
     });
+
+    // Create notification for admin/PHI about new restock request
+    try {
+      // Find all admin users to notify
+      const admins = await User.findAll({
+        where: { role: 'admin' }
+      });
+
+      // Create notifications for each admin
+      for (const admin of admins) {
+        await Notification.create({
+          officerId: admin.id, // Notify the admin
+          medicineId: medicineId,
+          createdBy: officerId, // Request created by the officer
+          type: 'RestockRequest',
+          status: 'Pending',
+          title: `New Restock Request from ${officer.username}`,
+          message: `${officer.username} has requested ${requestedQuantity} units of ${medicine.name}. Urgency: ${normalizedUrgency}. Reason: ${reason}`
+        });
+      }
+    } catch (notifError) {
+      console.error("Error creating notification:", notifError);
+      // Don't fail the request if notification fails
+    }
 
     // Fetch complete request with relations
     const fullRequest = await RestockRequest.findByPk(request.id, {
@@ -148,7 +174,7 @@ export const createRestockRequest = async (req, res) => {
       ]
     });
 
-    console.log(`Restock request created: ${medicine.name} - ${requestedQuantity} units (${urgency} urgency)`);
+    console.log(`Restock request created: ${medicine.name} - ${requestedQuantity} units (${normalizedUrgency} urgency)`);
 
     res.status(201).json({
       message: "Restock request created successfully",
@@ -177,18 +203,18 @@ export const approveRestockRequest = async (req, res) => {
       return res.status(404).json({ message: "Request not found" });
     }
 
-    if (request.status !== 'Pending') {
+    if (request.status !== 'PENDING') {
       return res.status(400).json({ message: "Request already processed" });
     }
 
     // Update request status
-    request.status = 'Approved';
+    request.status = 'APPROVED';
     request.reviewedBy = reviewerId;
     request.reviewedAt = new Date();
     await request.save();
 
-    // Create notification for officer
-    if (Notification) {
+    // Create notification for officer about approval
+    try {
       await Notification.create({
         officerId: request.officerId,
         medicineId: request.medicineId,
@@ -198,6 +224,8 @@ export const approveRestockRequest = async (req, res) => {
         title: `Restock Request Approved`,
         message: `Your request for ${request.requestedQuantity} units of ${request.medicine.name} has been approved.`
       });
+    } catch (notifError) {
+      console.error("Error creating approval notification:", notifError);
     }
 
     console.log(`Restock request approved: ID ${id}`);
@@ -229,19 +257,19 @@ export const rejectRestockRequest = async (req, res) => {
       return res.status(404).json({ message: "Request not found" });
     }
 
-    if (request.status !== 'Pending') {
+    if (request.status !== 'PENDING') {
       return res.status(400).json({ message: "Request already processed" });
     }
 
     // Update request status
-    request.status = 'Rejected';
+    request.status = 'REJECTED';
     request.reviewedBy = reviewerId;
     request.reviewedAt = new Date();
     request.rejectionReason = rejectionReason || "No reason provided";
     await request.save();
 
-    // Create notification for officer
-    if (Notification) {
+    // Create notification for officer about rejection
+    try {
       await Notification.create({
         officerId: request.officerId,
         medicineId: request.medicineId,
@@ -251,6 +279,8 @@ export const rejectRestockRequest = async (req, res) => {
         title: `Restock Request Rejected`,
         message: `Your request for ${request.requestedQuantity} units of ${request.medicine.name} has been rejected. Reason: ${rejectionReason || "Not specified"}`
       });
+    } catch (notifError) {
+      console.error("Error creating rejection notification:", notifError);
     }
 
     console.log(`Restock request rejected: ID ${id}`);
@@ -282,12 +312,12 @@ export const getRestockStatistics = async (req, res) => {
       lowUrgency
     ] = await Promise.all([
       RestockRequest.count({ where }),
-      RestockRequest.count({ where: { ...where, status: 'Pending' } }),
-      RestockRequest.count({ where: { ...where, status: 'Approved' } }),
-      RestockRequest.count({ where: { ...where, status: 'Rejected' } }),
-      RestockRequest.count({ where: { ...where, urgency: 'High', status: 'Pending' } }),
-      RestockRequest.count({ where: { ...where, urgency: 'Medium', status: 'Pending' } }),
-      RestockRequest.count({ where: { ...where, urgency: 'Low', status: 'Pending' } })
+      RestockRequest.count({ where: { ...where, status: 'PENDING' } }),
+      RestockRequest.count({ where: { ...where, status: 'APPROVED' } }),
+      RestockRequest.count({ where: { ...where, status: 'REJECTED' } }),
+      RestockRequest.count({ where: { ...where, urgency: 'HIGH', status: 'PENDING' } }),
+      RestockRequest.count({ where: { ...where, urgency: 'MEDIUM', status: 'PENDING' } }),
+      RestockRequest.count({ where: { ...where, urgency: 'LOW', status: 'PENDING' } })
     ]);
 
     res.json({

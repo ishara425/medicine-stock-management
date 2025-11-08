@@ -25,7 +25,7 @@ const OfficerDashboard = () => {
   const [restockForm, setRestockForm] = useState({
     medicineId: '',
     requestedQuantity: '',
-    urgency: 'MEDIUM',
+    urgency: 'Medium',
     reason: ''
   });
 
@@ -169,7 +169,7 @@ const OfficerDashboard = () => {
         setRestockForm({
           medicineId: '',
           requestedQuantity: '',
-          urgency: 'MEDIUM',
+          urgency: 'Medium',
           reason: ''
         });
         fetchRestockRequests();
@@ -222,7 +222,7 @@ const OfficerDashboard = () => {
         >
           <Bell className="w-5 h-5 mt-0.5" />
           <div className="text-left flex-1">
-            <div className="font-medium text-sm flex items-center justify-between">
+            <div className="font-Medium text-sm flex items-center justify-between">
               Notifications
               {pendingCount > 0 && (
                 <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{pendingCount}</span>
@@ -240,7 +240,7 @@ const OfficerDashboard = () => {
         >
           <Package className="w-5 h-5 mt-0.5" />
           <div className="text-left">
-            <div className="font-medium text-sm">My Inventory</div>
+            <div className="font-Medium text-sm">My Inventory</div>
             <div className="text-xs opacity-75">Current stock levels</div>
           </div>
         </button>
@@ -253,7 +253,7 @@ const OfficerDashboard = () => {
         >
           <TrendingUp className="w-5 h-5 mt-0.5" />
           <div className="text-left">
-            <div className="font-medium text-sm">Daily Usage</div>
+            <div className="font-Medium text-sm">Daily Usage</div>
             <div className="text-xs opacity-75">Track medicine usage</div>
           </div>
         </button>
@@ -266,7 +266,7 @@ const OfficerDashboard = () => {
         >
           <AlertTriangle className="w-5 h-5 mt-0.5" />
           <div className="text-left flex-1">
-            <div className="font-medium text-sm flex items-center justify-between">
+            <div className="font-Medium text-sm flex items-center justify-between">
               Restock Requests
               {pendingRestockCount > 0 && (
                 <span className="bg-yellow-500 text-white text-xs px-2 py-0.5 rounded-full">{pendingRestockCount}</span>
@@ -347,7 +347,7 @@ const OfficerDashboard = () => {
                     <p className="text-sm text-gray-500">From: {notif.creator?.username || 'PHI'}</p>
                   </div>
                 </div>
-                <span className={`px-3 py-1 rounded text-sm font-medium ${
+                <span className={`px-3 py-1 rounded text-sm font-Medium ${
                   notif.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
                   notif.status === 'Accepted' ? 'bg-green-100 text-green-700' :
                   'bg-red-100 text-red-700'
@@ -402,11 +402,11 @@ const OfficerDashboard = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Medicine</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Received</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Stock</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Used</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Medicine</th>
+                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Total Received</th>
+                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Current Stock</th>
+                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Total Used</th>
+                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -420,13 +420,13 @@ const OfficerDashboard = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <Package className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">{inv.medicine?.name || 'N/A'}</span>
+                        <span className="font-Medium">{inv.medicine?.name || 'N/A'}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">{inv.totalReceived} units</td>
                     <td className="px-6 py-4">
                       <div>
-                        <div className="font-medium">{inv.currentQuantity} units</div>
+                        <div className="font-Medium">{inv.currentQuantity} units</div>
                         <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
                           <div
                             className={`h-2 rounded-full ${
@@ -440,7 +440,7 @@ const OfficerDashboard = () => {
                     </td>
                     <td className="px-6 py-4">{totalUsed} units</td>
                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded text-sm font-medium ${status.bg} ${status.color}`}>
+                      <span className={`px-3 py-1 rounded text-sm font-Medium ${status.bg} ${status.color}`}>
                         {status.text}
                       </span>
                     </td>
@@ -480,7 +480,7 @@ const OfficerDashboard = () => {
             <div key={inv.id} className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">{inv.medicine?.name || 'N/A'}</h3>
-                <span className={`px-3 py-1 rounded text-sm font-medium ${status.bg} ${status.color}`}>
+                <span className={`px-3 py-1 rounded text-sm font-Medium ${status.bg} ${status.color}`}>
                   {percentage}% Stock
                 </span>
               </div>
@@ -510,7 +510,7 @@ const OfficerDashboard = () => {
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
                   <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={18} />
                   <div className="text-sm text-red-700">
-                    <p className="font-medium">Low Stock Alert!</p>
+                    <p className="font-Medium">Low Stock Alert!</p>
                     <p>Consider requesting restock soon to avoid running out.</p>
                   </div>
                 </div>
@@ -528,7 +528,7 @@ const OfficerDashboard = () => {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Medicine</label>
+                <label className="block text-sm font-Medium text-gray-700 mb-2">Medicine</label>
                 <select
                   value={selectedMedicine?.id || ''}
                   onChange={(e) => {
@@ -547,7 +547,7 @@ const OfficerDashboard = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Amount Used</label>
+                <label className="block text-sm font-Medium text-gray-700 mb-2">Amount Used</label>
                 <input
                   type="number"
                   value={usageAmount}
@@ -647,7 +647,7 @@ const OfficerDashboard = () => {
                   <div className="flex items-center gap-2 mt-1">
                     <span className={`px-2 py-0.5 rounded text-xs ${
                       req.urgency === 'HIGH' ? 'bg-red-100 text-red-700' :
-                      req.urgency === 'MEDIUM' ? 'bg-orange-100 text-orange-700' :
+                      req.urgency === 'Medium' ? 'bg-orange-100 text-orange-700' :
                       'bg-blue-100 text-blue-700'
                     }`}>
                       {req.urgency} Priority
@@ -711,7 +711,7 @@ const OfficerDashboard = () => {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Medicine</label>
+                <label className="block text-sm font-Medium text-gray-700 mb-2">Medicine</label>
                 <select
                   value={restockForm.medicineId}
                   onChange={(e) => setRestockForm({...restockForm, medicineId: e.target.value})}
@@ -727,7 +727,7 @@ const OfficerDashboard = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Requested Quantity</label>
+                <label className="block text-sm font-Medium text-gray-700 mb-2">Requested Quantity</label>
                 <input
                   type="number"
                   value={restockForm.requestedQuantity}
@@ -739,20 +739,20 @@ const OfficerDashboard = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Urgency Level</label>
+                <label className="block text-sm font-Medium text-gray-700 mb-2">Urgency Level</label>
                 <select
                   value={restockForm.urgency}
                   onChange={(e) => setRestockForm({...restockForm, urgency: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="LOW">Low - Can wait 1 week</option>
-                  <option value="MEDIUM">Medium - Needed in 2-3 days</option>
-                  <option value="HIGH">High - Urgent, needed ASAP</option>
+                  <option value="Low">Low - Can wait 1 week</option>
+                  <option value="Medium">Medium - Needed in 2-3 days</option>
+                  <option value="High">High - Urgent, needed ASAP</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Reason (min 20 characters)</label>
+                <label className="block text-sm font-Medium text-gray-700 mb-2">Reason (min 20 characters)</label>
                 <textarea
                   value={restockForm.reason}
                   onChange={(e) => setRestockForm({...restockForm, reason: e.target.value})}
@@ -769,7 +769,7 @@ const OfficerDashboard = () => {
                   setRestockForm({
                     medicineId: '',
                     requestedQuantity: '',
-                    urgency: 'MEDIUM',
+                    urgency: 'Medium',
                     reason: ''
                   });
                 }}

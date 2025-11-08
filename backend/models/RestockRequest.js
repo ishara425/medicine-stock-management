@@ -30,14 +30,14 @@ const RestockRequest = sequelize.define("RestockRequest", {
     }
   },
   urgency: {
-    type: DataTypes.ENUM('Low', 'Medium', 'High'),
+    type: DataTypes.ENUM('LOW', 'MEDIUM', 'HIGH'), // Changed to UPPERCASE
     allowNull: false,
-    defaultValue: 'Medium',
+    defaultValue: 'MEDIUM', // Changed to UPPERCASE
   },
   status: {
-    type: DataTypes.ENUM('Pending', 'Approved', 'Rejected'),
+    type: DataTypes.ENUM('PENDING', 'APPROVED', 'REJECTED'), // Changed to UPPERCASE
     allowNull: false,
-    defaultValue: 'Pending',
+    defaultValue: 'PENDING', // Changed to UPPERCASE
   },
   requestDate: {
     type: DataTypes.DATEONLY,

@@ -6,10 +6,10 @@ import Stock from "../models/stock.js";
 import Notification from "../models/Notification.js";
 import { Op } from "sequelize";
 
-// ✅ Get all officers (users with role "USER")
+// ✅ Get all officers (users with role "OFFICER")
 export const getOfficers = async (req, res) => {
   try {
-    const officers = await User.findAll({ where: { role: "USER" } });
+    const officers = await User.findAll({ where: { role: "OFFICER" } });
     res.json(officers);
   } catch (error) {
     res.status(500).json({ message: "Error fetching officers", error: error.message });

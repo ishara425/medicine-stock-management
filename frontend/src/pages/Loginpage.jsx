@@ -41,22 +41,40 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        // Store token
+        // Store token and user info
         localStorage.setItem('token', data.token);
+        localStorage.setItem('role', data.role); // Store user role
+        localStorage.setItem('userId', data.userId); // Store user ID
+        
         if (rememberMe) {
           localStorage.setItem('username', formData.username);
         }
-        // Redirect to dashboard on successful login
-        navigate('/dashboard');
-        console.log('Token:', data.token);
+
+        console.log('Login successful:', data);
+        console.log('User role:', data.role);
+
+        // Role-based redirect
+        if (data.role === 'OFFICER') {
+          navigate('/officer/dashboard', { replace: true });
+        } else {
+          // For ADMIN or USER role
+          navigate('/medicines', { replace: true });
+        }
       } else {
-        setError(data.error || 'Login failed');
+        setError(data.error || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
       setError('Unable to connect to server. Please try again.');
       console.error('Login error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle Enter key press
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSubmit();
     }
   };
 
@@ -162,6 +180,7 @@ export default function LoginPage() {
                 placeholder="YOUR USERNAME"
                 value={formData.username}
                 onChange={handleChange}
+                onKeyPress={handleKeyPress}
                 className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-gray-700 placeholder-gray-400"
               />
             </div>
@@ -177,6 +196,7 @@ export default function LoginPage() {
                 placeholder="YOUR PASSWORD"
                 value={formData.password}
                 onChange={handleChange}
+                onKeyPress={handleKeyPress}
                 className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-gray-700 placeholder-gray-400"
               />
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, XCircle, Filter, Calendar, User, Pill } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Filter, Calendar, User, Pill, RefreshCw } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8080/api';
 
@@ -8,29 +8,58 @@ const RestockRequestsManagement = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterUrgency, setFilterUrgency] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const currentUserId = localStorage.getItem('userId') || '1';
 
   useEffect(() => {
     fetchRestockRequests();
+    
+    // Auto-refresh every 15 seconds
+    const interval = setInterval(() => {
+      fetchRestockRequests(true); // Silent refresh
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchRestockRequests = async () => {
-    setLoading(true);
+  const fetchRestockRequests = async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+    
     try {
       const response = await fetch(`${API_BASE}/restock-requests`);
       if (response.ok) {
         const data = await response.json();
+        
+        // Debug logging
+        console.log('=== RESTOCK REQUESTS DEBUG ===');
+        console.log('Total requests:', data.length);
+        data.forEach(req => {
+          console.log(`ID: ${req.id} | Status: "${req.status}" | Urgency: "${req.urgency}" | Medicine: ${req.medicine?.name}`);
+        });
+        console.log('==============================');
+        
         setRequests(data);
+      } else {
+        console.error('Failed to fetch requests:', response.status);
       }
     } catch (error) {
       console.error('Error fetching restock requests:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const handleApprove = async (requestId) => {
+    if (!confirm('Are you sure you want to approve this restock request?')) {
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE}/restock-requests/${requestId}/approve`, {
         method: 'PATCH',
@@ -43,7 +72,7 @@ const RestockRequestsManagement = () => {
       });
 
       if (response.ok) {
-        alert('Restock request approved successfully!');
+        alert('Restock request approved successfully! Officer will be notified.');
         fetchRestockRequests();
       } else {
         const error = await response.json();
@@ -56,8 +85,15 @@ const RestockRequestsManagement = () => {
   };
 
   const handleReject = async (requestId) => {
-    const reason = prompt('Enter reason for rejection (optional):');
+    const reason = prompt('Enter reason for rejection:');
     
+    if (reason === null) return; // User cancelled
+    
+    if (!reason || reason.trim().length < 10) {
+      alert('Please provide a detailed reason (at least 10 characters)');
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE}/restock-requests/${requestId}/reject`, {
         method: 'PATCH',
@@ -66,12 +102,12 @@ const RestockRequestsManagement = () => {
         },
         body: JSON.stringify({
           reviewerId: parseInt(currentUserId),
-          rejectionReason: reason || 'No reason provided'
+          rejectionReason: reason.trim()
         })
       });
 
       if (response.ok) {
-        alert('Restock request rejected');
+        alert('Restock request rejected. Officer will be notified.');
         fetchRestockRequests();
       } else {
         const error = await response.json();
@@ -132,9 +168,19 @@ const RestockRequestsManagement = () => {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Restock Requests Management</h1>
-        <p className="text-gray-600 mt-1">Review and manage officer medicine restock requests</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Restock Requests Management</h1>
+          <p className="text-gray-600 mt-1">Review and manage officer medicine restock requests</p>
+        </div>
+        <button
+          onClick={() => fetchRestockRequests()}
+          disabled={loading || refreshing}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+          Refresh
+        </button>
       </div>
 
       {/* Summary Cards */}
@@ -219,7 +265,7 @@ const RestockRequestsManagement = () => {
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b">
           <h2 className="text-xl font-semibold">Restock Requests</h2>
-          <p className="text-sm text-gray-500">Review and approve officer requests</p>
+          <p className="text-sm text-gray-500">Review and approve officer requests • Total: {requests.length}</p>
         </div>
 
         <div className="p-6">
@@ -229,6 +275,9 @@ const RestockRequestsManagement = () => {
             <div className="text-center py-8">
               <AlertTriangle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-500">No restock requests found</p>
+              {requests.length > 0 && (
+                <p className="text-sm text-gray-400 mt-2">Try adjusting your filters</p>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -258,18 +307,18 @@ const RestockRequestsManagement = () => {
                           <h3 className="font-semibold text-gray-900">
                             {request.medicine?.name || 'N/A'} {request.medicine?.dosage || ''}
                           </h3>
-                          <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                          <div className="flex items-center gap-2 text-sm text-gray-500 mt-1 flex-wrap">
                             <span className="flex items-center gap-1">
                               <User size={14} />
-                              {request.officer?.username || 'N/A'}
+                              <span>{request.officer?.username || 'N/A'}</span>
                             </span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPriorityBadge(request.urgency)}`}>
+                            <span className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${getPriorityBadge(request.urgency)}`}>
                               {getPriorityLabel(request.urgency)}
                             </span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1 ${getStatusBadge(request.status)}`}>
+                            <span className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 whitespace-nowrap ${getStatusBadge(request.status)}`}>
                               {request.status === 'APPROVED' && <CheckCircle size={12} />}
                               {request.status === 'REJECTED' && <XCircle size={12} />}
-                              {request.status}
+                              <span>{request.status}</span>
                             </span>
                           </div>
                         </div>

@@ -21,18 +21,23 @@ export default function MedicineDistributions() {
     fetchDistributions();
   }, []);
 
+  // ✅ Fetch only users with role "OFFICER"
   const fetchOfficers = async () => {
     try {
       const response = await fetch(`${API_BASE}/distributions/officers`);
       if (response.ok) {
         const data = await response.json();
-        setOfficers(data);
-        console.log('Officers loaded:', data);
+        // Filter to only show users with role "OFFICER" (double check)
+        const officersOnly = data.filter(user => user.role === 'OFFICER');
+        setOfficers(officersOnly);
+        console.log('Officers loaded:', officersOnly);
       } else {
         console.error('Failed to fetch officers:', response.status);
+        setError('Failed to load officers. Please refresh the page.');
       }
     } catch (error) {
       console.error('Error fetching officers:', error);
+      setError('Unable to load officers. Please check your connection.');
     }
   };
 
@@ -90,7 +95,6 @@ export default function MedicineDistributions() {
 
     setLoading(true);
     try {
-      // Send distribution request with JSON body (matches your backend controller)
       const response = await fetch(`${API_BASE}/distributions`, {
         method: 'POST',
         headers: {
@@ -114,7 +118,7 @@ export default function MedicineDistributions() {
         
         // Refresh data
         fetchDistributions();
-        fetchMedicines(); // Refresh to show updated stock
+        fetchMedicines();
       } else {
         const errorData = await response.json();
         console.error('Distribution failed:', errorData);
@@ -182,7 +186,7 @@ export default function MedicineDistributions() {
                 <option value="">Select Officer</option>
                 {officers.map((officer) => (
                   <option key={officer.id} value={officer.id}>
-                    {officer.username} (ID: {officer.id})
+                    {officer.username}
                   </option>
                 ))}
               </select>
@@ -208,7 +212,7 @@ export default function MedicineDistributions() {
                     value={medicine.id}
                     disabled={medicine.stock <= 0}
                   >
-                    {medicine.name} {medicine.dosage} (Stock: {medicine.stock}) {medicine.stock <= 0 ? '- Out of Stock' : ''}
+                    {medicine.srNumber ? `${medicine.srNumber} - ` : ''}{medicine.name} {medicine.dosage} (Stock: {medicine.stock}) {medicine.stock <= 0 ? '- Out of Stock' : ''}
                   </option>
                 ))}
               </select>
@@ -237,7 +241,6 @@ export default function MedicineDistributions() {
               </button>
             </div>
           </div>
-
         </div>
 
         <div className="bg-white rounded-lg shadow">
@@ -285,6 +288,7 @@ export default function MedicineDistributions() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-900">
                         <Pill size={16} className="mr-2 text-gray-400" />
+                        {dist.medicine?.srNumber ? `${dist.medicine.srNumber} - ` : ''}
                         {dist.medicine?.name || 'N/A'} {dist.medicine?.dosage || ''}
                       </div>
                     </td>

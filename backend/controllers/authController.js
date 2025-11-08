@@ -45,11 +45,17 @@ export const loginUser = async (req, res) => {
     // Generate JWT
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      process.env.JWT_SECRET || "your-secret-key-here", // Fallback if JWT_SECRET not in .env
+      { expiresIn: "24h" } // Extended to 24 hours
     );
 
-    res.json({ token });
+    // ✅ Return token, role, userId, and username
+    res.json({ 
+      token,
+      role: user.role,           // Add role for frontend redirect
+      userId: user.id,           // Add userId for future use
+      username: user.username    // Add username for display
+    });
   } catch (error) {
     res.status(500).json({ message: "Login failed", error: error.message });
   }

@@ -1,19 +1,25 @@
-import mysql from "mysql2";
 
-const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT,
-});
+import { Sequelize } from "sequelize";
+import dotenv from "dotenv";
 
-db.connect((err) => {
-  if (err) {
-    console.error("❌ MySQL connection failed:", err.message);
-  } else {
-    console.log("✅ MySQL connected successfully!");
+dotenv.config();
+
+const sequelize = new Sequelize(
+  process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASSWORD,
+  {
+    host: process.env.DB_HOST,
+    dialect: "mysql",
+    port: process.env.DB_PORT || 3306,
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: true, // for Azure MySQL
+      },
+    },
+    logging: false, // optional: hides SQL logs in console
   }
-});
+);
 
-export default db;
+export default sequelize;

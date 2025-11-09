@@ -4,11 +4,15 @@ import dotenv from "dotenv";
 import cors from "cors";
 import sequelize from "./config/db.js";
 
-// Models
+// Models - Import all models
 import User from "./models/User.js";
 import Medicine from "./models/Medicine.js";
 import Distribution from "./models/Distribution.js";
 import Stock from "./models/stock.js";
+import Notification from "./models/Notification.js";
+import OfficerInventory from "./models/OfficerInventory.js";
+import RestockRequest from "./models/RestockRequest.js";
+import DailyUsage from "./models/DailyUsage.js";
 
 // Routes
 import authRoutes from "./routes/authRoutes.js";
@@ -30,17 +34,33 @@ app.use(express.json());
 // Define Sequelize Associations
 // -----------------------------
 
-// 1️⃣ User → Distribution
-User.hasMany(Distribution, { foreignKey: "officerId", as: "distributionsByUser" });
-Distribution.belongsTo(User, { foreignKey: "officerId", as: "officerUser" });
+// ✅ IMPORTANT: All belongsTo associations are already defined in model files
+// We only define hasMany/hasOne reverse associations here to avoid duplicates
 
-// 2️⃣ Medicine → Distribution
-Medicine.hasMany(Distribution, { foreignKey: "medicineId", as: "distributionsByMedicine" });
-Distribution.belongsTo(Medicine, { foreignKey: "medicineId", as: "medicineDistributed" });
+// Distribution reverse relationships
+User.hasMany(Distribution, { foreignKey: "officerId", as: "distributions" });
+Medicine.hasMany(Distribution, { foreignKey: "medicineId", as: "medicineDistributions" });
 
-// 3️⃣ Medicine → Stock
-Medicine.hasMany(Stock, { foreignKey: "medicineId", as: "stocksByMedicine" });
-Stock.belongsTo(Medicine, { foreignKey: "medicineId", as: "medicineStock" });
+// Stock reverse relationships  
+Medicine.hasMany(Stock, { foreignKey: "medicineId", as: "stocks" });
+
+// Notification reverse relationships
+User.hasMany(Notification, { foreignKey: "officerId", as: "receivedNotifications" });
+User.hasMany(Notification, { foreignKey: "createdBy", as: "createdNotifications" });
+Medicine.hasMany(Notification, { foreignKey: "medicineId", as: "notifications" });
+Distribution.hasMany(Notification, { foreignKey: "distributionId", as: "notifications" });
+
+// Officer Inventory reverse relationships
+User.hasMany(OfficerInventory, { foreignKey: "officerId", as: "inventories" });
+Medicine.hasMany(OfficerInventory, { foreignKey: "medicineId", as: "officerInventories" });
+
+// Restock Request reverse relationships
+User.hasMany(RestockRequest, { foreignKey: "officerId", as: "restockRequests" });
+User.hasMany(RestockRequest, { foreignKey: "reviewedBy", as: "reviewedRequests" });
+Medicine.hasMany(RestockRequest, { foreignKey: "medicineId", as: "restockRequests" });
+
+// Daily Usage reverse relationships
+OfficerInventory.hasMany(DailyUsage, { foreignKey: "inventoryId", as: "usageHistory" });
 
 // -----------------------------
 // Connect to MySQL and sync models
@@ -55,6 +75,7 @@ const connectDB = async () => {
     console.log("✅ All models synchronized successfully!");
   } catch (error) {
     console.error("❌ Database connection failed:", error.message);
+    process.exit(1); // Exit if database connection fails
   }
 };
 
@@ -82,6 +103,17 @@ app.get("/api/test-db", async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Database error", error: error.message });
   }
+});
+
+// -----------------------------
+// Global Error Handler
+// -----------------------------
+app.use((err, req, res, next) => {
+  console.error("Global Error Handler:", err);
+  res.status(500).json({ 
+    message: "Internal server error", 
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
 });
 
 // -----------------------------

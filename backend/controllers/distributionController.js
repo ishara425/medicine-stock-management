@@ -5,6 +5,7 @@ import Medicine from "../models/Medicine.js";
 import Stock from "../models/stock.js";
 import Notification from "../models/Notification.js";
 import { Op } from "sequelize";
+import sequelize from "../config/db.js";
 
 // ✅ Get all officers (users with role "OFFICER")
 export const getOfficers = async (req, res) => {
@@ -16,22 +17,37 @@ export const getOfficers = async (req, res) => {
   }
 };
 
-// ✅ Get all medicines
+// ✅ Get all medicines with calculated stock from Stock table
 export const getMedicines = async (req, res) => {
   try {
-    const medicines = await Medicine.findAll();
+    // Get all medicines with their total stock from Stock table
+    const medicines = await Medicine.findAll({
+      attributes: {
+        include: [
+          [
+            sequelize.literal(`(
+              SELECT COALESCE(SUM(quantityAvailable), 0)
+              FROM Stocks
+              WHERE Stocks.medicineId = Medicine.id
+            )`),
+            'stock'
+          ]
+        ]
+      },
+      order: [['name', 'ASC']]
+    });
+    
     res.json(medicines);
   } catch (error) {
+    console.error("Error fetching medicines:", error);
     res.status(500).json({ message: "Error fetching medicines", error: error.message });
   }
 };
 
-// ✅ Create new distribution (FIXED - Properly updates Stock entries using FIFO)
+// ✅ Create new distribution (Uses Stock table for inventory management)
 export const distributeMedicine = async (req, res) => {
   try {
     const { officerId, medicineId, quantity } = req.body;
-
-    
 
     // Validate input
     if (!officerId || !medicineId || !quantity) {
@@ -54,32 +70,34 @@ export const distributeMedicine = async (req, res) => {
       return res.status(404).json({ message: "Medicine not found" });
     }
 
-    // Check if enough stock is available in Medicine table
-    if (medicine.stock < quantity) {
+    // ✅ Get total available stock from Stock table
+    const totalStockResult = await Stock.findAll({
+      attributes: [[sequelize.fn('SUM', sequelize.col('quantityAvailable')), 'totalAvailable']],
+      where: { 
+        medicineId: medicineId,
+        quantityAvailable: { [Op.gt]: 0 }
+      },
+      raw: true
+    });
+
+    const totalAvailable = parseInt(totalStockResult[0]?.totalAvailable) || 0;
+
+    if (totalAvailable < quantity) {
       return res.status(400).json({ 
-        message: `Insufficient stock. Available: ${medicine.stock}, Requested: ${quantity}` 
+        message: `Insufficient stock. Available: ${totalAvailable}, Requested: ${quantity}` 
       });
     }
 
-    // Get all stock entries for this medicine with available quantity (FIFO)
+    // ✅ Get all stock entries for this medicine (FIFO - First In First Out)
     const stocks = await Stock.findAll({
       where: { 
         medicineId: medicineId,
         quantityAvailable: { [Op.gt]: 0 }
       },
-      order: [['receivedDate', 'ASC']] // FIFO - First In First Out
+      order: [['receivedDate', 'ASC']] // FIFO ordering
     });
 
-    // Calculate total available quantity in Stock table
-    const totalAvailable = stocks.reduce((sum, stock) => sum + (stock.quantityAvailable || 0), 0);
-
-    if (totalAvailable < quantity) {
-      return res.status(400).json({ 
-        message: `Insufficient available stock. Total available: ${totalAvailable}, Requested: ${quantity}` 
-      });
-    }
-
-    // Distribute quantity across stock entries (FIFO)
+    // ✅ Distribute quantity across stock entries (FIFO)
     let remainingQuantity = quantity;
     
     for (const stock of stocks) {
@@ -91,16 +109,10 @@ export const distributeMedicine = async (req, res) => {
       
       remainingQuantity -= deductAmount;
       
-      console.log(`Deducted ${deductAmount} from Stock ID ${stock.id}. Remaining available: ${stock.quantityAvailable}`);
+      console.log(`✅ Deducted ${deductAmount} from Stock ID ${stock.id}. Remaining available: ${stock.quantityAvailable}`);
     }
 
-    // Reduce medicine stock
-    medicine.stock -= quantity;
-    await medicine.save();
-
-    console.log(`Updated Medicine ${medicine.name}. New stock: ${medicine.stock}`);
-
-    // Create a new distribution
+    // ✅ Create a new distribution
     const distribution = await Distribution.create({
       officerId,
       medicineId,
@@ -109,7 +121,7 @@ export const distributeMedicine = async (req, res) => {
       status: "Completed",
     });
 
-        // ✨ NEW: Create notification for officer
+    // ✅ Create notification for officer
     const phiUser = await User.findByPk(req.body.phiId || 1); // Get PHI from request or default
     
     await Notification.create({
@@ -123,19 +135,38 @@ export const distributeMedicine = async (req, res) => {
       message: `${quantity} units of ${medicine.name} have been distributed to you by ${phiUser ? phiUser.username : 'PHI'}.`
     });
 
-    // Fetch the complete distribution with relations
+    // ✅ Fetch the complete distribution with relations
     const fullDistribution = await Distribution.findByPk(distribution.id, {
       include: [
         { model: User, as: "officer", attributes: ["id", "username", "role"] },
-        { model: Medicine, as: "medicine", attributes: ["id", "name", "category", "dosage", "stock"] },
+        { 
+          model: Medicine, 
+          as: "medicine", 
+          attributes: {
+            include: [
+              ['id', 'id'],
+              ['name', 'name'],
+              ['category', 'category'],
+              ['dosage', 'dosage'],
+              [
+                sequelize.literal(`(
+                  SELECT COALESCE(SUM(quantityAvailable), 0)
+                  FROM Stocks
+                  WHERE Stocks.medicineId = medicine.id
+                )`),
+                'stock'
+              ]
+            ]
+          }
+        },
       ],
     });
 
-    console.log(`Distribution created and notification sent to ${officer.username}`);
+    console.log(`✅ Distribution created: ${quantity} units of ${medicine.name} to ${officer.username}`);
 
     res.status(201).json(fullDistribution);
   } catch (error) {
-    console.error("Distribution error:", error);
+    console.error("❌ Distribution error:", error);
     res.status(500).json({ message: "Error distributing medicine", error: error.message });
   }
 };
@@ -146,12 +177,32 @@ export const getAllDistributions = async (req, res) => {
     const distributions = await Distribution.findAll({
       include: [
         { model: User, as: "officer", attributes: ["id", "username", "role"] },
-        { model: Medicine, as: "medicine", attributes: ["id", "name", "category", "dosage", "stock"] },
+        { 
+          model: Medicine, 
+          as: "medicine", 
+          attributes: {
+            include: [
+              ['id', 'id'],
+              ['name', 'name'],
+              ['category', 'category'],
+              ['dosage', 'dosage'],
+              [
+                sequelize.literal(`(
+                  SELECT COALESCE(SUM(quantityAvailable), 0)
+                  FROM Stocks
+                  WHERE Stocks.medicineId = medicine.id
+                )`),
+                'stock'
+              ]
+            ]
+          }
+        },
       ],
       order: [['date', 'DESC']], // Most recent first
     });
     res.json(distributions);
   } catch (error) {
+    console.error("Error fetching distributions:", error);
     res.status(500).json({ message: "Error fetching distributions", error: error.message });
   }
 };

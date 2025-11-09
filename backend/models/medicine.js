@@ -5,13 +5,13 @@ import sequelize from "../config/db.js";
 const Medicine = sequelize.define("Medicine", {
   id: {
     type: DataTypes.BIGINT,
-    autoIncrement: true,  // Keep auto-increment for internal database ID
+    autoIncrement: true,
     primaryKey: true,
   },
   srNumber: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true,  // Ensures each SR number is unique
+    unique: true,
     validate: {
       notEmpty: true,
     }
@@ -23,17 +23,13 @@ const Medicine = sequelize.define("Medicine", {
   dosage: DataTypes.STRING,
   manufacturer: DataTypes.STRING,
   category: DataTypes.STRING,
-  stock: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0
-  },
   expirationDate: {
-    type: DataTypes.DATEONLY,  // Use DATEONLY for date without time
+    type: DataTypes.DATEONLY,
     allowNull: true,
-  },
-  instructions: DataTypes.TEXT,
+  }
+  // ✅ NO stock field - stock is calculated from Stock table
 }, {
-  timestamps: true,  // Adds createdAt and updatedAt
+  timestamps: true,
   indexes: [
     {
       unique: true,

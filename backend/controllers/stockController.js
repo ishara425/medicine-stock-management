@@ -2,7 +2,7 @@
 import Stock from "../models/stock.js";
 import Medicine from "../models/Medicine.js";
 import { Op } from "sequelize";
-import sequelize from "../config/db.js";  // ✨ ADD THIS IMPORT
+import sequelize from "../config/db.js";
 
 // GET /api/stock
 export const getAllStock = async (req, res) => {
@@ -13,11 +13,12 @@ export const getAllStock = async (req, res) => {
     });
     res.json(stocks);
   } catch (error) {
+    console.error("Error in getAllStock:", error);
     res.status(500).json({ message: "Error fetching stock", error: error.message });
   }
 };
 
-// ✨ NEW: GET /api/stock/consolidated - Get consolidated stock view (one row per medicine)
+// GET /api/stock/consolidated - Get consolidated stock view (one row per medicine)
 export const getConsolidatedStock = async (req, res) => {
   try {
     const consolidatedStock = await Stock.findAll({
@@ -31,22 +32,23 @@ export const getConsolidatedStock = async (req, res) => {
       include: [{ 
         model: Medicine, 
         as: "medicine",
-        attributes: ['id', 'name', 'dosage', 'category', 'stock']
+        attributes: ['id', 'name', 'dosage', 'category', 'srNumber']
       }],
       group: ['medicineId', 'medicine.id'],
-      order: [[sequelize.fn('MAX', sequelize.col('Stock.updatedAt')), 'DESC']]
+      order: [[sequelize.fn('MAX', sequelize.col('Stock.updatedAt')), 'DESC']],
+      raw: false
     });
 
     // Format the response
     const formattedStock = consolidatedStock.map((item, index) => ({
       id: item.medicineId,
-      srNumber: `MED${String(index + 1).padStart(3, '0')}`,
+      srNumber: item.medicine?.srNumber || `MED${String(index + 1).padStart(3, '0')}`,
       medicine: item.medicine,
       medicineName: item.medicine?.name,
-      quantity: parseInt(item.dataValues.totalQuantity) || 0,
-      quantityAvailable: parseInt(item.dataValues.totalAvailable) || 0,
-      lastUpdated: item.dataValues.lastUpdated,
-      firstReceived: item.dataValues.firstReceived
+      quantity: parseInt(item.getDataValue('totalQuantity')) || 0, // Total stock
+      quantityAvailable: parseInt(item.getDataValue('totalAvailable')) || 0, // Available stock
+      lastUpdated: item.getDataValue('lastUpdated'),
+      firstReceived: item.getDataValue('firstReceived')
     }));
 
     res.json(formattedStock);
@@ -56,10 +58,14 @@ export const getConsolidatedStock = async (req, res) => {
   }
 };
 
-// ✨ NEW: GET /api/stock/medicine/:medicineId/batches - Get all batches for a specific medicine
+// GET /api/stock/medicine/:medicineId/batches
 export const getMedicineBatches = async (req, res) => {
   try {
     const { medicineId } = req.params;
+    
+    if (!medicineId || isNaN(medicineId)) {
+      return res.status(400).json({ message: "Invalid medicine ID" });
+    }
     
     const batches = await Stock.findAll({
       where: { medicineId: parseInt(medicineId) },
@@ -70,7 +76,7 @@ export const getMedicineBatches = async (req, res) => {
     res.json(batches);
   } catch (error) {
     console.error("Error fetching medicine batches:", error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Error fetching medicine batches", error: error.message });
   }
 };
 
@@ -78,11 +84,15 @@ export const getMedicineBatches = async (req, res) => {
 export const receiveStock = async (req, res) => {
   try {
     const { medicineId } = req.query;
-    const { quantity, batchNumber, receivedDate, expiryDate } = req.body;
+    const { quantity, batchNumber, receivedDate, expiryDate, supplier, unitPrice } = req.body;
 
     // Validate required fields
     if (!medicineId || !quantity) {
       return res.status(400).json({ message: "medicineId and quantity are required" });
+    }
+
+    if (isNaN(quantity) || quantity <= 0) {
+      return res.status(400).json({ message: "Quantity must be a positive number" });
     }
 
     const medicine = await Medicine.findByPk(medicineId);
@@ -90,23 +100,19 @@ export const receiveStock = async (req, res) => {
       return res.status(404).json({ message: "Medicine not found" });
     }
 
-    // Create stock entry with quantityAvailable equal to quantity initially
+    // Create stock entry - quantity and quantityAvailable are the same initially
     const stock = await Stock.create({ 
       medicineId: parseInt(medicineId),
       quantity: parseInt(quantity),
-      quantityAvailable: parseInt(quantity), // Initially, all received stock is available
-      batchNumber: batchNumber || `BATCH-${Date.now()}`, // Auto-generate if not provided
+      quantityAvailable: parseInt(quantity), // All received stock is available initially
+      batchNumber: batchNumber || `BATCH-${Date.now()}`,
       receivedDate: receivedDate || new Date(),
-      expiryDate: expiryDate || null
+      expiryDate: expiryDate || null,
+      supplier: supplier || null,
+      unitPrice: unitPrice || null
     });
 
-    console.log(`Stock created: ID ${stock.id}, Quantity: ${stock.quantity}, Available: ${stock.quantityAvailable}`);
-
-    // Update medicine total stock
-    medicine.stock = (medicine.stock || 0) + parseInt(quantity);
-    await medicine.save();
-
-    console.log(`Medicine ${medicine.name} stock updated to: ${medicine.stock}`);
+    console.log(`✅ Stock received: Medicine ID ${medicineId}, Quantity: ${stock.quantity}, Available: ${stock.quantityAvailable}`);
 
     // Return stock with medicine details
     const stockWithMedicine = await Stock.findByPk(stock.id, {
@@ -123,32 +129,34 @@ export const receiveStock = async (req, res) => {
 // GET /api/stock/summary
 export const getStockSummary = async (req, res) => {
   try {
-    // Count unique medicines using SQL aggregation for better performance
-    const uniqueMedicines = await Stock.findAll({
+    // Count unique medicines that have stock
+    const uniqueMedicinesResult = await Stock.findAll({
       attributes: [[sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('medicineId'))), 'count']],
       raw: true
     });
-    const totalMedicines = parseInt(uniqueMedicines[0]?.count) || 0;
+    const totalMedicines = parseInt(uniqueMedicinesResult[0]?.count) || 0;
     
-    // Get all stocks for low stock calculation (grouped by medicine)
+    // Get grouped stock data for low stock calculation
     const stocks = await Stock.findAll({
       attributes: [
         'medicineId',
         [sequelize.fn('SUM', sequelize.col('quantity')), 'totalQuantity'],
         [sequelize.fn('SUM', sequelize.col('quantityAvailable')), 'totalAvailable'],
       ],
-      group: ['medicineId']
+      group: ['medicineId'],
+      raw: true
     });
     
+    // Calculate low stock items (less than 20% available)
     const lowStockItems = stocks.filter(stock => {
-      const total = parseInt(stock.dataValues.totalQuantity) || 0;
-      const available = parseInt(stock.dataValues.totalAvailable) || 0;
+      const total = parseInt(stock.totalQuantity) || 0;
+      const available = parseInt(stock.totalAvailable) || 0;
       if (total === 0) return false;
       const percentage = (available / total) * 100;
       return percentage < 20 && available > 0;
     }).length;
 
-    // Count recent updates (last 7 days)
+    // Count recent stock updates (last 7 days)
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
     const stockUpdates = await Stock.count({
@@ -162,35 +170,50 @@ export const getStockSummary = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in stock summary:", error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Error fetching stock summary", error: error.message });
   }
 };
 
 // GET /api/stock/:id
 export const getStockById = async (req, res) => {
   try {
-    const stock = await Stock.findByPk(req.params.id, { 
+    const { id } = req.params;
+    
+    if (!id || isNaN(id)) {
+      return res.status(400).json({ message: "Invalid stock ID" });
+    }
+    
+    const stock = await Stock.findByPk(id, { 
       include: { model: Medicine, as: "medicine" } 
     });
-    if (!stock) return res.status(404).json({ message: "Stock not found" });
+    
+    if (!stock) {
+      return res.status(404).json({ message: "Stock not found" });
+    }
+    
     res.json(stock);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error in getStockById:", error);
+    res.status(500).json({ message: "Error fetching stock", error: error.message });
   }
 };
 
-// PUT /api/stock/:id?medicineId=1
+// PUT /api/stock/:id
 export const updateStock = async (req, res) => {
   try {
+    const { id } = req.params;
     const { medicineId } = req.query;
-    const stock = await Stock.findByPk(req.params.id);
-    if (!stock) return res.status(404).json({ message: "Stock not found" });
-
-    const oldAvailable = stock.quantityAvailable;
+    
+    const stock = await Stock.findByPk(id);
+    if (!stock) {
+      return res.status(404).json({ message: "Stock not found" });
+    }
 
     if (medicineId) {
       const medicine = await Medicine.findByPk(medicineId);
-      if (!medicine) return res.status(404).json({ message: "Medicine not found" });
+      if (!medicine) {
+        return res.status(404).json({ message: "Medicine not found" });
+      }
       stock.medicineId = medicineId;
     }
 
@@ -198,20 +221,7 @@ export const updateStock = async (req, res) => {
     Object.assign(stock, req.body);
     await stock.save();
 
-    // If quantity changed, update Medicine total stock
-    if (req.body.quantityAvailable !== undefined) {
-      const medicine = await Medicine.findByPk(stock.medicineId);
-      if (medicine) {
-        // Recalculate total stock from all stock entries
-        const allStocks = await Stock.findAll({
-          where: { medicineId: stock.medicineId }
-        });
-        const totalStock = allStocks.reduce((sum, s) => sum + (s.quantityAvailable || 0), 0);
-        medicine.stock = totalStock;
-        await medicine.save();
-        console.log(`Medicine ${medicine.name} total stock recalculated to: ${totalStock}`);
-      }
-    }
+    console.log(`✅ Stock updated: ID ${id}, Available: ${stock.quantityAvailable}`);
     
     const updatedStock = await Stock.findByPk(stock.id, {
       include: { model: Medicine, as: "medicine" }
@@ -219,32 +229,29 @@ export const updateStock = async (req, res) => {
     
     res.json(updatedStock);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error in updateStock:", error);
+    res.status(500).json({ message: "Error updating stock", error: error.message });
   }
 };
 
 // DELETE /api/stock/:id
 export const deleteStock = async (req, res) => {
   try {
-    const stock = await Stock.findByPk(req.params.id);
-    if (!stock) return res.status(404).json({ message: "Stock not found" });
+    const { id } = req.params;
     
-    const medicineId = stock.medicineId;
-    const quantityToDeduct = stock.quantityAvailable || 0;
+    const stock = await Stock.findByPk(id);
+    if (!stock) {
+      return res.status(404).json({ message: "Stock not found" });
+    }
+    
+    console.log(`✅ Stock deleted: ID ${id}, Medicine ID: ${stock.medicineId}`);
     
     await stock.destroy();
     
-    // Update medicine total stock after deletion
-    const medicine = await Medicine.findByPk(medicineId);
-    if (medicine) {
-      medicine.stock = Math.max(0, (medicine.stock || 0) - quantityToDeduct);
-      await medicine.save();
-      console.log(`Medicine ${medicine.name} stock updated after deletion to: ${medicine.stock}`);
-    }
-    
     res.status(204).send();
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error in deleteStock:", error);
+    res.status(500).json({ message: "Error deleting stock", error: error.message });
   }
 };
 
@@ -264,8 +271,10 @@ export const getExpiringStock = async (req, res) => {
       include: { model: Medicine, as: "medicine" },
       order: [['expiryDate', 'ASC']]
     });
+    
     res.json(stocks);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error in getExpiringStock:", error);
+    res.status(500).json({ message: "Error fetching expiring stock", error: error.message });
   }
 };

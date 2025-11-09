@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Package, TrendingUp, AlertTriangle, CheckCircle, XCircle, Clock, Calendar, LogOut } from 'lucide-react';
+import { Bell, Package, TrendingUp, AlertTriangle, CheckCircle, XCircle, Clock, Calendar, LogOut, MessageSquare } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8080/api';
 
-// Get current user from localStorage
 const getCurrentUser = () => {
   return localStorage.getItem('username') || 'Officer User';
 };
@@ -15,6 +14,7 @@ const getCurrentUserId = () => {
 const OfficerDashboard = () => {
   const [activePage, setActivePage] = useState('notifications');
   const [notifications, setNotifications] = useState([]);
+  const [restockNotifications, setRestockNotifications] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [restockRequests, setRestockRequests] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -34,6 +34,7 @@ const OfficerDashboard = () => {
 
   useEffect(() => {
     fetchNotifications();
+    fetchRestockNotifications();
     fetchInventory();
     fetchRestockRequests();
   }, []);
@@ -47,6 +48,18 @@ const OfficerDashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching notifications:', error);
+    }
+  };
+
+  const fetchRestockNotifications = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/notifications/officer/${currentUserId}/restock-updates`);
+      if (response.ok) {
+        const data = await response.json();
+        setRestockNotifications(data);
+      }
+    } catch (error) {
+      console.error('Error fetching restock notifications:', error);
     }
   };
 
@@ -83,6 +96,9 @@ const OfficerDashboard = () => {
         alert('Distribution accepted successfully!');
         fetchNotifications();
         fetchInventory();
+      } else {
+        const error = await response.json();
+        alert(error.message || 'Error accepting notification');
       }
     } catch (error) {
       console.error('Error accepting notification:', error);
@@ -98,10 +114,26 @@ const OfficerDashboard = () => {
       if (response.ok) {
         alert('Distribution rejected');
         fetchNotifications();
+      } else {
+        const error = await response.json();
+        alert(error.message || 'Error rejecting notification');
       }
     } catch (error) {
       console.error('Error rejecting notification:', error);
       alert('Error rejecting notification');
+    }
+  };
+
+  const handleMarkRestockAsRead = async (notificationId) => {
+    try {
+      const response = await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
+        method: 'PATCH'
+      });
+      if (response.ok) {
+        fetchRestockNotifications();
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
     }
   };
 
@@ -196,8 +228,10 @@ const OfficerDashboard = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const pendingCount = notifications.filter(n => n.status === 'Pending').length;
+  const pendingDistributionCount = notifications.filter(n => n.status === 'Pending').length;
   const pendingRestockCount = restockRequests.filter(r => r.status === 'PENDING').length;
+  const unreadRestockNotifications = restockNotifications.filter(n => n.status !== 'Read').length;
+  const totalNotificationCount = pendingDistributionCount + unreadRestockNotifications;
 
   const renderSidebar = () => (
     <div className="w-64 bg-blue-900 text-white h-screen fixed left-0 top-0 flex flex-col">
@@ -222,13 +256,13 @@ const OfficerDashboard = () => {
         >
           <Bell className="w-5 h-5 mt-0.5" />
           <div className="text-left flex-1">
-            <div className="font-Medium text-sm flex items-center justify-between">
+            <div className="font-medium text-sm flex items-center justify-between">
               Notifications
-              {pendingCount > 0 && (
-                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{pendingCount}</span>
+              {totalNotificationCount > 0 && (
+                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{totalNotificationCount}</span>
               )}
             </div>
-            <div className="text-xs opacity-75">Medicine distributions</div>
+            <div className="text-xs opacity-75">All updates</div>
           </div>
         </button>
 
@@ -240,7 +274,7 @@ const OfficerDashboard = () => {
         >
           <Package className="w-5 h-5 mt-0.5" />
           <div className="text-left">
-            <div className="font-Medium text-sm">My Inventory</div>
+            <div className="font-medium text-sm">My Inventory</div>
             <div className="text-xs opacity-75">Current stock levels</div>
           </div>
         </button>
@@ -253,7 +287,7 @@ const OfficerDashboard = () => {
         >
           <TrendingUp className="w-5 h-5 mt-0.5" />
           <div className="text-left">
-            <div className="font-Medium text-sm">Daily Usage</div>
+            <div className="font-medium text-sm">Daily Usage</div>
             <div className="text-xs opacity-75">Track medicine usage</div>
           </div>
         </button>
@@ -266,7 +300,7 @@ const OfficerDashboard = () => {
         >
           <AlertTriangle className="w-5 h-5 mt-0.5" />
           <div className="text-left flex-1">
-            <div className="font-Medium text-sm flex items-center justify-between">
+            <div className="font-medium text-sm flex items-center justify-between">
               Restock Requests
               {pendingRestockCount > 0 && (
                 <span className="bg-yellow-500 text-white text-xs px-2 py-0.5 rounded-full">{pendingRestockCount}</span>
@@ -286,111 +320,209 @@ const OfficerDashboard = () => {
     </div>
   );
 
-  const renderNotifications = () => (
-    <div>
-      <div className="grid grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Pending Actions</p>
-              <p className="text-3xl font-semibold text-yellow-600">{pendingCount}</p>
+  const renderNotifications = () => {
+    return (
+      <div>
+        <div className="grid grid-cols-3 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Pending Actions</p>
+                <p className="text-3xl font-semibold text-yellow-600">{pendingDistributionCount}</p>
+              </div>
+              <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <Clock className="text-yellow-600" size={20} />
+              </div>
             </div>
-            <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <Clock className="text-yellow-600" size={20} />
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Total Medicines</p>
+                <p className="text-3xl font-semibold text-blue-600">{inventory.length}</p>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Package className="text-blue-600" size={20} />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Current Stock</p>
+                <p className="text-3xl font-semibold text-green-600">
+                  {inventory.reduce((sum, inv) => sum + inv.currentQuantity, 0)}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <TrendingUp className="text-green-600" size={20} />
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Total Medicines</p>
-              <p className="text-3xl font-semibold text-blue-600">{inventory.length}</p>
-            </div>
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Package className="text-blue-600" size={20} />
+        {notifications.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Package className="w-5 h-5 text-blue-600" />
+              Medicine Distributions
+            </h2>
+            <div className="space-y-4">
+              {notifications.map((notif) => (
+                <div key={notif.id} className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <Package className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {notif.medicine?.name || 'N/A'} {notif.medicine?.dosage || ''}
+                        </h3>
+                        <p className="text-sm text-gray-500">From: {notif.creator?.username || 'PHI'}</p>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded text-sm font-medium ${
+                      notif.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                      notif.status === 'Accepted' ? 'bg-green-100 text-green-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {notif.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Quantity</p>
+                      <p className="font-semibold">{notif.distribution?.quantity || 0} units</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Date</p>
+                      <p className="font-semibold">{formatDate(notif.createdAt)}</p>
+                    </div>
+                  </div>
+
+                  {notif.status === 'Pending' && (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handleAcceptNotification(notif.id)}
+                        className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle size={18} />
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleRejectNotification(notif.id)}
+                        className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
+                      >
+                        <XCircle size={18} />
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Current Stock</p>
-              <p className="text-3xl font-semibold text-green-600">
-                {inventory.reduce((sum, inv) => sum + inv.currentQuantity, 0)}
-              </p>
-            </div>
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="text-green-600" size={20} />
+        {restockNotifications.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-purple-600" />
+              Restock Request Updates
+            </h2>
+            <div className="space-y-4">
+              {restockNotifications.map((notif) => {
+                const isApproved = notif.type === 'RestockApproval';
+                const isRead = notif.status === 'Read';
+                
+                return (
+                  <div 
+                    key={notif.id} 
+                    className={`bg-white rounded-lg shadow p-6 border-l-4 ${
+                      isApproved ? 'border-green-500' : 'border-red-500'
+                    } ${!isRead ? 'bg-blue-50' : ''}`}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          isApproved ? 'bg-green-100' : 'bg-red-100'
+                        }`}>
+                          {isApproved ? (
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                          ) : (
+                            <XCircle className="w-5 h-5 text-red-600" />
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">
+                            {notif.medicine?.name || 'N/A'}
+                          </h3>
+                          <p className="text-sm text-gray-500">{notif.title}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1 rounded text-sm font-medium ${
+                          isApproved ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {isApproved ? 'APPROVED' : 'REJECTED'}
+                        </span>
+                        {!isRead && (
+                          <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className={`p-4 rounded-lg mb-4 ${
+                      isApproved ? 'bg-green-50' : 'bg-red-50'
+                    }`}>
+                      <div className="flex items-start gap-2">
+                        <MessageSquare className={`flex-shrink-0 mt-0.5 ${
+                          isApproved ? 'text-green-600' : 'text-red-600'
+                        }`} size={18} />
+                        <div className="flex-1">
+                          <p className={`text-sm ${
+                            isApproved ? 'text-green-900' : 'text-red-900'
+                          }`}>
+                            {notif.message}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-500">
+                        {formatDate(notif.createdAt)}
+                      </p>
+                      {!isRead && (
+                        <button
+                          onClick={() => handleMarkRestockAsRead(notif.id)}
+                          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          Mark as Read
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </div>
-      </div>
+        )}
 
-      <div className="space-y-4">
-        {notifications.length === 0 ? (
+        {notifications.length === 0 && restockNotifications.length === 0 && (
           <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
             <Bell className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p>No notifications</p>
+            <p>No notifications at the moment</p>
+            <p className="text-sm text-gray-400 mt-1">You'll see updates here when there are new distributions or restock decisions</p>
           </div>
-        ) : (
-          notifications.map((notif) => (
-            <div key={notif.id} className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <Package className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      {notif.medicine?.name || 'N/A'} {notif.medicine?.dosage || ''}
-                    </h3>
-                    <p className="text-sm text-gray-500">From: {notif.creator?.username || 'PHI'}</p>
-                  </div>
-                </div>
-                <span className={`px-3 py-1 rounded text-sm font-Medium ${
-                  notif.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
-                  notif.status === 'Accepted' ? 'bg-green-100 text-green-700' :
-                  'bg-red-100 text-red-700'
-                }`}>
-                  {notif.status}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-xs text-gray-500">Quantity</p>
-                  <p className="font-semibold">{notif.distribution?.quantity || 0} units</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Date</p>
-                  <p className="font-semibold">{formatDate(notif.createdAt)}</p>
-                </div>
-              </div>
-
-              {notif.status === 'Pending' && (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => handleAcceptNotification(notif.id)}
-                    className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle size={18} />
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => handleRejectNotification(notif.id)}
-                    className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
-                  >
-                    <XCircle size={18} />
-                    Reject
-                  </button>
-                </div>
-              )}
-            </div>
-          ))
         )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderInventory = () => (
     <div>
@@ -402,11 +534,11 @@ const OfficerDashboard = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Medicine</th>
-                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Total Received</th>
-                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Current Stock</th>
-                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Total Used</th>
-                <th className="px-6 py-3 text-left text-xs font-Medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Medicine</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Received</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Stock</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Used</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -420,13 +552,13 @@ const OfficerDashboard = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <Package className="w-4 h-4 text-gray-400" />
-                        <span className="font-Medium">{inv.medicine?.name || 'N/A'}</span>
+                        <span className="font-medium">{inv.medicine?.name || 'N/A'}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">{inv.totalReceived} units</td>
                     <td className="px-6 py-4">
                       <div>
-                        <div className="font-Medium">{inv.currentQuantity} units</div>
+                        <div className="font-medium">{inv.currentQuantity} units</div>
                         <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
                           <div
                             className={`h-2 rounded-full ${
@@ -440,7 +572,7 @@ const OfficerDashboard = () => {
                     </td>
                     <td className="px-6 py-4">{totalUsed} units</td>
                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded text-sm font-Medium ${status.bg} ${status.color}`}>
+                      <span className={`px-3 py-1 rounded text-sm font-medium ${status.bg} ${status.color}`}>
                         {status.text}
                       </span>
                     </td>
@@ -480,7 +612,7 @@ const OfficerDashboard = () => {
             <div key={inv.id} className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">{inv.medicine?.name || 'N/A'}</h3>
-                <span className={`px-3 py-1 rounded text-sm font-Medium ${status.bg} ${status.color}`}>
+                <span className={`px-3 py-1 rounded text-sm font-medium ${status.bg} ${status.color}`}>
                   {percentage}% Stock
                 </span>
               </div>
@@ -510,7 +642,7 @@ const OfficerDashboard = () => {
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
                   <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={18} />
                   <div className="text-sm text-red-700">
-                    <p className="font-Medium">Low Stock Alert!</p>
+                    <p className="font-medium">Low Stock Alert!</p>
                     <p>Consider requesting restock soon to avoid running out.</p>
                   </div>
                 </div>
@@ -528,7 +660,7 @@ const OfficerDashboard = () => {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-Medium text-gray-700 mb-2">Medicine</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Medicine</label>
                 <select
                   value={selectedMedicine?.id || ''}
                   onChange={(e) => {
@@ -547,7 +679,7 @@ const OfficerDashboard = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-Medium text-gray-700 mb-2">Amount Used</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Amount Used</label>
                 <input
                   type="number"
                   value={usageAmount}
@@ -637,70 +769,85 @@ const OfficerDashboard = () => {
       </div>
 
       <div className="space-y-4">
-        {restockRequests.map((req) => (
-          <div key={req.id} className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <Package className="w-5 h-5 text-blue-600" />
-                <div>
-                  <h3 className="font-semibold">{req.medicine?.name || 'N/A'}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`px-2 py-0.5 rounded text-xs ${
-                      req.urgency === 'HIGH' ? 'bg-red-100 text-red-700' :
-                      req.urgency === 'Medium' ? 'bg-orange-100 text-orange-700' :
-                      'bg-blue-100 text-blue-700'
-                    }`}>
-                      {req.urgency} Priority
-                    </span>
-                    <span className={`px-2 py-0.5 rounded text-xs ${
-                      req.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                      req.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {req.status}
-                    </span>
+        {restockRequests.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p>No restock requests yet</p>
+          </div>
+        ) : (
+          restockRequests.map((req) => (
+            <div key={req.id} className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Package className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <h3 className="font-semibold">{req.medicine?.name || 'N/A'}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`px-2 py-0.5 rounded text-xs ${
+                        req.urgency === 'HIGH' ? 'bg-red-100 text-red-700' :
+                        req.urgency === 'MEDIUM' ? 'bg-orange-100 text-orange-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {req.urgency} Priority
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-xs ${
+                        req.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                        req.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {req.status}
+                      </span>
+                    </div>
                   </div>
                 </div>
+                <span className="text-sm text-gray-500">{formatDate(req.requestDate)}</span>
               </div>
-              <span className="text-sm text-gray-500">{formatDate(req.requestDate)}</span>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-4 bg-gray-50 p-3 rounded">
-              <div>
-                <p className="text-xs text-gray-500">Requested Quantity</p>
-                <p className="font-semibold">{req.requestedQuantity} units</p>
+              <div className="grid grid-cols-2 gap-4 mb-4 bg-gray-50 p-3 rounded">
+                <div>
+                  <p className="text-xs text-gray-500">Requested Quantity</p>
+                  <p className="font-semibold">{req.requestedQuantity} units</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Current Stock</p>
+                  <p className="font-semibold">{req.currentStock} units</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-gray-500">Current Stock</p>
-                <p className="font-semibold">{req.currentStock} units</p>
-              </div>
-            </div>
 
-            <div className="mb-4">
-              <p className="text-xs text-gray-500 mb-1">Reason</p>
-              <p className="text-sm text-gray-700">{req.reason}</p>
-            </div>
+              <div className="mb-4">
+                <p className="text-xs text-gray-500 mb-1">Reason</p>
+                <p className="text-sm text-gray-700">{req.reason}</p>
+              </div>
 
-            {req.status === 'PENDING' && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Clock size={16} />
-                <span>Awaiting Review</span>
-              </div>
-            )}
-            {req.status === 'APPROVED' && (
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle size={16} />
-                <span>Approved</span>
-              </div>
-            )}
-            {req.status === 'REJECTED' && (
-              <div className="flex items-center gap-2 text-sm text-red-600">
-                <XCircle size={16} />
-                <span>Rejected</span>
-              </div>
-            )}
-          </div>
-        ))}
+              {req.status === 'PENDING' && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Clock size={16} />
+                  <span>Awaiting Review</span>
+                </div>
+              )}
+              {req.status === 'APPROVED' && (
+                <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-2 rounded">
+                  <CheckCircle size={16} />
+                  <span>Approved - Check notifications for details</span>
+                </div>
+              )}
+              {req.status === 'REJECTED' && (
+                <div>
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-2 rounded mb-2">
+                    <XCircle size={16} />
+                    <span>Rejected - Check notifications for feedback</span>
+                  </div>
+                  {req.rejectionReason && (
+                    <div className="bg-red-50 p-3 rounded">
+                      <p className="text-xs text-red-600 font-medium mb-1">Admin Feedback:</p>
+                      <p className="text-sm text-red-700">{req.rejectionReason}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {showRestockModal && (
@@ -711,7 +858,7 @@ const OfficerDashboard = () => {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-Medium text-gray-700 mb-2">Medicine</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Medicine</label>
                 <select
                   value={restockForm.medicineId}
                   onChange={(e) => setRestockForm({...restockForm, medicineId: e.target.value})}
@@ -727,7 +874,7 @@ const OfficerDashboard = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-Medium text-gray-700 mb-2">Requested Quantity</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Requested Quantity</label>
                 <input
                   type="number"
                   value={restockForm.requestedQuantity}
@@ -739,20 +886,20 @@ const OfficerDashboard = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-Medium text-gray-700 mb-2">Urgency Level</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Urgency Level</label>
                 <select
                   value={restockForm.urgency}
                   onChange={(e) => setRestockForm({...restockForm, urgency: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="Low">Low - Can wait 1 week</option>
-                  <option value="Medium">Medium - Needed in 2-3 days</option>
-                  <option value="High">High - Urgent, needed ASAP</option>
+                  <option value="LOW">Low - Can wait 1 week</option>
+                  <option value="MEDIUM">Medium - Needed in 2-3 days</option>
+                  <option value="HIGH">High - Urgent, needed ASAP</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-Medium text-gray-700 mb-2">Reason (min 20 characters)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Reason (min 20 characters)</label>
                 <textarea
                   value={restockForm.reason}
                   onChange={(e) => setRestockForm({...restockForm, reason: e.target.value})}
@@ -769,7 +916,7 @@ const OfficerDashboard = () => {
                   setRestockForm({
                     medicineId: '',
                     requestedQuantity: '',
-                    urgency: 'Medium',
+                    urgency: 'MEDIUM',
                     reason: ''
                   });
                 }}

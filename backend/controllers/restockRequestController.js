@@ -5,6 +5,7 @@ import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import Medicine from "../models/Medicine.js";
 import { Op } from "sequelize";
+import sequelize from "../config/db.js";
 
 // GET /api/restock-requests - Get all restock requests (with filters)
 export const getAllRestockRequests = async (req, res) => {
@@ -13,8 +14,8 @@ export const getAllRestockRequests = async (req, res) => {
     
     const where = {};
     if (officerId) where.officerId = officerId;
-    if (status) where.status = status;
-    if (urgency) where.urgency = urgency;
+    if (status) where.status = status.toUpperCase(); // ✅ Normalize to uppercase
+    if (urgency) where.urgency = urgency.toUpperCase(); // ✅ Normalize to uppercase
     if (startDate || endDate) {
       where.requestDate = {};
       if (startDate) where.requestDate[Op.gte] = startDate;
@@ -37,18 +38,30 @@ export const getAllRestockRequests = async (req, res) => {
         { 
           model: Medicine, 
           as: "medicine", 
-          attributes: ["id", "name", "dosage", "category", "stock"] 
+          attributes: ["id", "name", "dosage", "category"] // ✅ Removed 'stock'
         },
       ],
       order: [
-        ['urgency', 'DESC'], // High urgency first
-        ['requestDate', 'DESC'] // Then by date
+        ['urgency', 'DESC'], // HIGH > MEDIUM > LOW
+        ['requestDate', 'DESC'] // Most recent first
       ]
     });
 
+    console.log(`✅ Fetched ${requests.length} restock requests from database`);
+    
+    // Debug: Log first few requests
+    if (requests.length > 0) {
+      console.log('Sample request:', {
+        id: requests[0].id,
+        status: requests[0].status,
+        urgency: requests[0].urgency,
+        medicine: requests[0].medicine?.name
+      });
+    }
+    
     res.json(requests);
   } catch (error) {
-    console.error("Error fetching restock requests:", error);
+    console.error("❌ Error fetching restock requests:", error);
     res.status(500).json({ message: "Error fetching requests", error: error.message });
   }
 };
@@ -80,9 +93,11 @@ export const getOfficerRestockRequests = async (req, res) => {
       order: [['requestDate', 'DESC']]
     });
 
+    console.log(`✅ Fetched ${requests.length} requests for officer ${officerId}`);
+    
     res.json(requests);
   } catch (error) {
-    console.error("Error fetching officer requests:", error);
+    console.error("❌ Error fetching officer requests:", error);
     res.status(500).json({ message: "Error fetching requests", error: error.message });
   }
 };
@@ -91,6 +106,8 @@ export const getOfficerRestockRequests = async (req, res) => {
 export const createRestockRequest = async (req, res) => {
   try {
     const { officerId, medicineId, requestedQuantity, reason, urgency } = req.body;
+
+    console.log('📝 Creating restock request:', { officerId, medicineId, requestedQuantity, urgency });
 
     // Validate input
     if (!officerId || !medicineId || !requestedQuantity || !reason || !urgency) {
@@ -138,9 +155,11 @@ export const createRestockRequest = async (req, res) => {
       requestedQuantity,
       reason,
       urgency: normalizedUrgency,
-      status: 'PENDING', // Changed from 'Pending' to 'PENDING'
+      status: 'PENDING',
       requestDate: new Date()
     });
+
+    console.log(`✅ Restock request created with ID: ${request.id}, Status: ${request.status}, Urgency: ${request.urgency}`);
 
     // Create notification for admin/PHI about new restock request
     try {
@@ -149,9 +168,11 @@ export const createRestockRequest = async (req, res) => {
         where: { role: 'admin' }
       });
 
+      console.log(`📬 Found ${admins.length} admin(s) to notify`);
+
       // Create notifications for each admin
       for (const admin of admins) {
-        await Notification.create({
+        const notif = await Notification.create({
           officerId: admin.id, // Notify the admin
           medicineId: medicineId,
           createdBy: officerId, // Request created by the officer
@@ -160,9 +181,10 @@ export const createRestockRequest = async (req, res) => {
           title: `New Restock Request from ${officer.username}`,
           message: `${officer.username} has requested ${requestedQuantity} units of ${medicine.name}. Urgency: ${normalizedUrgency}. Reason: ${reason}`
         });
+        console.log(`📧 Notification created for admin ${admin.username} (ID: ${notif.id})`);
       }
     } catch (notifError) {
-      console.error("Error creating notification:", notifError);
+      console.error("❌ Error creating notification:", notifError);
       // Don't fail the request if notification fails
     }
 
@@ -174,14 +196,14 @@ export const createRestockRequest = async (req, res) => {
       ]
     });
 
-    console.log(`Restock request created: ${medicine.name} - ${requestedQuantity} units (${normalizedUrgency} urgency)`);
+    console.log(`✅ SUCCESS: Restock request fully created and saved to database`);
 
     res.status(201).json({
       message: "Restock request created successfully",
       request: fullRequest
     });
   } catch (error) {
-    console.error("Error creating restock request:", error);
+    console.error("❌ Error creating restock request:", error);
     res.status(500).json({ message: "Error creating request", error: error.message });
   }
 };
@@ -228,14 +250,14 @@ export const approveRestockRequest = async (req, res) => {
       console.error("Error creating approval notification:", notifError);
     }
 
-    console.log(`Restock request approved: ID ${id}`);
+    console.log(`✅ Restock request approved: ID ${id}`);
 
     res.json({
       message: "Restock request approved successfully",
       request
     });
   } catch (error) {
-    console.error("Error approving request:", error);
+    console.error("❌ Error approving request:", error);
     res.status(500).json({ message: "Error approving request", error: error.message });
   }
 };
@@ -283,14 +305,14 @@ export const rejectRestockRequest = async (req, res) => {
       console.error("Error creating rejection notification:", notifError);
     }
 
-    console.log(`Restock request rejected: ID ${id}`);
+    console.log(`✅ Restock request rejected: ID ${id}`);
 
     res.json({
       message: "Restock request rejected",
       request
     });
   } catch (error) {
-    console.error("Error rejecting request:", error);
+    console.error("❌ Error rejecting request:", error);
     res.status(500).json({ message: "Error rejecting request", error: error.message });
   }
 };

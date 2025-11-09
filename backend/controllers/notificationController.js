@@ -7,14 +7,19 @@ import Distribution from "../models/Distribution.js";
 import { Op } from "sequelize";
 
 // GET /api/notifications/officer/:officerId - Get officer's notifications
+// Returns ONLY Distribution notifications (not restock approval/rejection)
 export const getOfficerNotifications = async (req, res) => {
   try {
     const { officerId } = req.params;
-    const { status, type } = req.query;
+    const { status } = req.query;
     
-    const where = { officerId };
+    // Only get Distribution type notifications
+    const where = { 
+      officerId,
+      type: 'Distribution'
+    };
+    
     if (status) where.status = status;
-    if (type) where.type = type;
 
     const notifications = await Notification.findAll({
       where,
@@ -31,6 +36,34 @@ export const getOfficerNotifications = async (req, res) => {
   } catch (error) {
     console.error("Error fetching notifications:", error);
     res.status(500).json({ message: "Error fetching notifications", error: error.message });
+  }
+};
+
+// NEW: GET /api/notifications/officer/:officerId/restock-updates
+// Returns restock approval/rejection notifications
+export const getRestockNotifications = async (req, res) => {
+  try {
+    const { officerId } = req.params;
+    
+    const notifications = await Notification.findAll({
+      where: { 
+        officerId,
+        type: {
+          [Op.in]: ['RestockApproval', 'RestockRejection']
+        }
+      },
+      include: [
+        { model: User, as: "officer", attributes: ["id", "username", "role"] },
+        { model: User, as: "creator", attributes: ["id", "username", "role"] },
+        { model: Medicine, as: "medicine", attributes: ["id", "name", "dosage", "category"] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json(notifications);
+  } catch (error) {
+    console.error("Error fetching restock notifications:", error);
+    res.status(500).json({ message: "Error fetching restock notifications", error: error.message });
   }
 };
 
@@ -54,8 +87,11 @@ export const acceptNotification = async (req, res) => {
       return res.status(400).json({ message: "Notification already processed" });
     }
 
+    // Only Distribution type can be accepted
     if (notification.type !== 'Distribution') {
-      return res.status(400).json({ message: "Only distribution notifications can be accepted" });
+      return res.status(400).json({ 
+        message: "Only distribution notifications can be accepted/rejected" 
+      });
     }
 
     // Update notification status
@@ -72,7 +108,7 @@ export const acceptNotification = async (req, res) => {
     // Update officer inventory
     const quantity = notification.distribution ? notification.distribution.quantity : 0;
     
-let inventory = await OfficerInventory.findOne({
+    let inventory = await OfficerInventory.findOne({
       where: {
         officerId: notification.officerId,
         medicineId: notification.medicineId
@@ -80,14 +116,11 @@ let inventory = await OfficerInventory.findOne({
     });
 
     if (inventory) {
-      // Update existing inventory
       inventory.totalReceived += quantity;
       inventory.currentQuantity += quantity;
       inventory.lastUpdated = new Date();
       await inventory.save();
-      console.log(`Updated inventory: ${inventory.medicine?.name} - Added ${quantity} units`);
     } else {
-      // Create new inventory record
       inventory = await OfficerInventory.create({
         officerId: notification.officerId,
         medicineId: notification.medicineId,
@@ -95,7 +128,6 @@ let inventory = await OfficerInventory.findOne({
         currentQuantity: quantity,
         lastUpdated: new Date()
       });
-      console.log(`Created new inventory: Medicine ID ${notification.medicineId} - ${quantity} units`);
     }
 
     const updatedNotification = await Notification.findByPk(id, {
@@ -107,7 +139,7 @@ let inventory = await OfficerInventory.findOne({
       ]
     });
 
-    res.json({
+    return res.json({
       message: "Distribution accepted successfully",
       notification: updatedNotification,
       inventory
@@ -139,7 +171,9 @@ export const rejectNotification = async (req, res) => {
     }
 
     if (notification.type !== 'Distribution') {
-      return res.status(400).json({ message: "Only distribution notifications can be rejected" });
+      return res.status(400).json({ 
+        message: "Only distribution notifications can be rejected" 
+      });
     }
 
     // Update notification status
@@ -172,7 +206,7 @@ export const rejectNotification = async (req, res) => {
   }
 };
 
-// PATCH /api/notifications/:id/read - Mark notification as read
+// PATCH /api/notifications/:id/read - Mark notification as read (for restock notifications)
 export const markAsRead = async (req, res) => {
   try {
     const { id } = req.params;
@@ -181,6 +215,13 @@ export const markAsRead = async (req, res) => {
 
     if (!notification) {
       return res.status(404).json({ message: "Notification not found" });
+    }
+
+    // Only restock notifications should be marked as read
+    if (notification.type === 'Distribution') {
+      return res.status(400).json({ 
+        message: "Distribution notifications should be accepted or rejected, not marked as read" 
+      });
     }
 
     notification.status = 'Read';
@@ -204,24 +245,35 @@ export const getNotificationCounts = async (req, res) => {
 
     const [
       totalNotifications,
-      pendingNotifications,
-      acceptedNotifications,
-      rejectedNotifications,
-      unreadNotifications
+      pendingDistributions,
+      unreadRestockUpdates
     ] = await Promise.all([
       Notification.count({ where: { officerId } }),
-      Notification.count({ where: { officerId, status: 'Pending' } }),
-      Notification.count({ where: { officerId, status: 'Accepted' } }),
-      Notification.count({ where: { officerId, status: 'Rejected' } }),
-      Notification.count({ where: { officerId, readAt: null } })
+      Notification.count({ 
+        where: { 
+          officerId, 
+          type: 'Distribution',
+          status: 'Pending' 
+        } 
+      }),
+      Notification.count({ 
+        where: { 
+          officerId,
+          type: {
+            [Op.in]: ['RestockApproval', 'RestockRejection']
+          },
+          status: {
+            [Op.ne]: 'Read'
+          }
+        } 
+      })
     ]);
 
     res.json({
       totalNotifications,
-      pendingNotifications,
-      acceptedNotifications,
-      rejectedNotifications,
-      unreadNotifications
+      pendingDistributions,
+      unreadRestockUpdates,
+      totalPending: pendingDistributions + unreadRestockUpdates
     });
   } catch (error) {
     console.error("Error fetching notification counts:", error);

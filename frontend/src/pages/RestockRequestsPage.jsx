@@ -9,15 +9,19 @@ const RestockRequestsManagement = () => {
   const [filterUrgency, setFilterUrgency] = useState('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [processing, setProcessing] = useState(false);
 
   const currentUserId = localStorage.getItem('userId') || '1';
 
   useEffect(() => {
     fetchRestockRequests();
     
-    // Auto-refresh every 15 seconds
     const interval = setInterval(() => {
-      fetchRestockRequests(true); // Silent refresh
+      fetchRestockRequests(true);
     }, 15000);
 
     return () => clearInterval(interval);
@@ -34,15 +38,6 @@ const RestockRequestsManagement = () => {
       const response = await fetch(`${API_BASE}/restock-requests`);
       if (response.ok) {
         const data = await response.json();
-        
-        // Debug logging
-        console.log('=== RESTOCK REQUESTS DEBUG ===');
-        console.log('Total requests:', data.length);
-        data.forEach(req => {
-          console.log(`ID: ${req.id} | Status: "${req.status}" | Urgency: "${req.urgency}" | Medicine: ${req.medicine?.name}`);
-        });
-        console.log('==============================');
-        
         setRequests(data);
       } else {
         console.error('Failed to fetch requests:', response.status);
@@ -55,13 +50,23 @@ const RestockRequestsManagement = () => {
     }
   };
 
-  const handleApprove = async (requestId) => {
-    if (!confirm('Are you sure you want to approve this restock request?')) {
-      return;
-    }
+  const handleApproveClick = (request) => {
+    setSelectedRequest(request);
+    setShowApproveModal(true);
+  };
 
+  const handleRejectClick = (request) => {
+    setSelectedRequest(request);
+    setRejectionReason('');
+    setShowRejectModal(true);
+  };
+
+  const confirmApprove = async () => {
+    if (!selectedRequest) return;
+    
+    setProcessing(true);
     try {
-      const response = await fetch(`${API_BASE}/restock-requests/${requestId}/approve`, {
+      const response = await fetch(`${API_BASE}/restock-requests/${selectedRequest.id}/approve`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
@@ -72,61 +77,67 @@ const RestockRequestsManagement = () => {
       });
 
       if (response.ok) {
-        alert('Restock request approved successfully! Officer will be notified.');
-        fetchRestockRequests();
+        alert('Request approved successfully! The officer will be notified.');
+        setShowApproveModal(false);
+        setSelectedRequest(null);
+        await fetchRestockRequests();
       } else {
         const error = await response.json();
         alert(error.message || 'Failed to approve request');
       }
     } catch (error) {
       console.error('Error approving request:', error);
-      alert('Error approving request');
+      alert('An error occurred while approving the request');
+    } finally {
+      setProcessing(false);
     }
   };
 
-  const handleReject = async (requestId) => {
-    const reason = prompt('Enter reason for rejection:');
+  const confirmReject = async () => {
+    if (!selectedRequest) return;
     
-    if (reason === null) return; // User cancelled
-    
-    if (!reason || reason.trim().length < 10) {
+    if (!rejectionReason || rejectionReason.trim().length < 10) {
       alert('Please provide a detailed reason (at least 10 characters)');
       return;
     }
 
+    setProcessing(true);
     try {
-      const response = await fetch(`${API_BASE}/restock-requests/${requestId}/reject`, {
+      const response = await fetch(`${API_BASE}/restock-requests/${selectedRequest.id}/reject`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           reviewerId: parseInt(currentUserId),
-          rejectionReason: reason.trim()
+          rejectionReason: rejectionReason.trim()
         })
       });
 
       if (response.ok) {
-        alert('Restock request rejected. Officer will be notified.');
-        fetchRestockRequests();
+        alert('Request rejected. The officer will be notified with your feedback.');
+        setShowRejectModal(false);
+        setSelectedRequest(null);
+        setRejectionReason('');
+        await fetchRestockRequests();
       } else {
         const error = await response.json();
         alert(error.message || 'Failed to reject request');
       }
     } catch (error) {
       console.error('Error rejecting request:', error);
-      alert('Error rejecting request');
+      alert('An error occurred while rejecting the request');
+    } finally {
+      setProcessing(false);
     }
   };
 
-  // Calculate statistics
   const stats = {
     pending: requests.filter(r => r.status === 'PENDING').length,
     urgent: requests.filter(r => r.urgency === 'HIGH' && r.status === 'PENDING').length,
     approved: requests.filter(r => r.status === 'APPROVED').length
   };
 
-  // Filter requests
   const filteredRequests = requests.filter(request => {
     const statusMatch = filterStatus === 'all' || request.status === filterStatus.toUpperCase();
     const urgencyMatch = filterUrgency === 'all' || request.urgency === filterUrgency.toUpperCase();
@@ -183,7 +194,6 @@ const RestockRequestsManagement = () => {
         </button>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
@@ -225,7 +235,6 @@ const RestockRequestsManagement = () => {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <div className="flex items-center gap-2 mb-4">
           <Filter size={20} className="text-gray-500" />
@@ -261,7 +270,6 @@ const RestockRequestsManagement = () => {
         </div>
       </div>
 
-      {/* Requests List */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b">
           <h2 className="text-xl font-semibold">Restock Requests</h2>
@@ -283,7 +291,6 @@ const RestockRequestsManagement = () => {
             <div className="space-y-4">
               {filteredRequests
                 .sort((a, b) => {
-                  // Sort by urgency (HIGH > MEDIUM > LOW) then by date
                   const urgencyOrder = { HIGH: 0, MEDIUM: 1, LOW: 2 };
                   const urgencyDiff = urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
                   if (urgencyDiff !== 0) return urgencyDiff;
@@ -354,14 +361,14 @@ const RestockRequestsManagement = () => {
                     {request.status === 'PENDING' ? (
                       <div className="flex gap-3">
                         <button
-                          onClick={() => handleApprove(request.id)}
+                          onClick={() => handleApproveClick(request)}
                           className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 transition-colors"
                         >
                           <CheckCircle size={18} />
                           Approve
                         </button>
                         <button
-                          onClick={() => handleReject(request.id)}
+                          onClick={() => handleRejectClick(request)}
                           className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 transition-colors"
                         >
                           <XCircle size={18} />
@@ -402,6 +409,98 @@ const RestockRequestsManagement = () => {
           )}
         </div>
       </div>
+
+      {/* Approve Modal */}
+      {showApproveModal && selectedRequest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-semibold">Approve Restock Request</h2>
+            </div>
+            <div className="p-6">
+              <p className="mb-4">Are you sure you want to approve this restock request?</p>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="font-medium text-gray-900">{selectedRequest.medicine?.name}</p>
+                <p className="text-sm text-gray-600 mt-1">Quantity: {selectedRequest.requestedQuantity} units</p>
+              </div>
+              <p className="text-sm text-gray-500 mt-4">
+                The officer will be notified and the request will be marked as approved.
+              </p>
+            </div>
+            <div className="p-6 border-t flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowApproveModal(false);
+                  setSelectedRequest(null);
+                }}
+                disabled={processing}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmApprove}
+                disabled={processing}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {processing ? 'Approving...' : 'Approve'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && selectedRequest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-semibold">Reject Restock Request</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-red-50 p-4 rounded-lg">
+                <p className="font-medium text-gray-900">{selectedRequest.medicine?.name}</p>
+                <p className="text-sm text-gray-600 mt-1">Quantity: {selectedRequest.requestedQuantity} units</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason for Rejection *
+                </label>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  rows="4"
+                  placeholder="Please provide a detailed reason (minimum 10 characters)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This reason will be sent to the officer.
+                </p>
+              </div>
+            </div>
+            <div className="p-6 border-t flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowRejectModal(false);
+                  setSelectedRequest(null);
+                  setRejectionReason('');
+                }}
+                disabled={processing}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmReject}
+                disabled={processing}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {processing ? 'Rejecting...' : 'Reject Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

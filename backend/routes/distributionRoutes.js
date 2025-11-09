@@ -4,14 +4,15 @@ import {
   getOfficers,
   getMedicines,
   distributeMedicine,
-  getAllDistributions,
+  getAllDistributions
 } from "../controllers/distributionController.js";
 
 const router = express.Router();
 
+// Distribution routes
 router.get("/officers", getOfficers);
 router.get("/medicines", getMedicines);
-router.post("/", distributeMedicine);
 router.get("/", getAllDistributions);
+router.post("/", distributeMedicine);
 
 export default router;

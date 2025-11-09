@@ -45,7 +45,7 @@ export default function MedicineDashboard() {
     }, 3000);
   };
 
-  const API_BASE = 'http://localhost:8080/api/medicines';
+const API_BASE = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/medicines`;
 
   useEffect(() => {
     fetchMedicines();
@@ -97,11 +97,6 @@ export default function MedicineDashboard() {
       return;
     }
 
-    if (!formData.srNumber.trim() || !formData.name.trim()) {
-      showNotification('error', 'SR Number and Medicine Name cannot be empty');
-      return;
-    }
-
     try {
       const cleanData = {
         srNumber: formData.srNumber.trim(),
@@ -111,8 +106,6 @@ export default function MedicineDashboard() {
         category: formData.category.trim() || null,
         expirationDate: formData.expirationDate || null
       };
-
-      console.log('Sending data:', JSON.stringify(cleanData, null, 2));
 
       const response = await fetch(API_BASE, {
         method: 'POST',
@@ -124,18 +117,11 @@ export default function MedicineDashboard() {
         showNotification('success', 'Medicine added successfully!');
         setShowAddModal(false);
         resetForm();
-        await fetchMedicines();
-        await fetchSummary();
+        fetchMedicines();
+        fetchSummary();
       } else {
         const error = await response.json();
-        console.error('Server error response:', error);
-        
-        // Check for duplicate SR Number error
-        if (error.error && error.error.includes('unique')) {
-          showNotification('error', 'SR Number already exists. Please use a different SR Number.');
-        } else {
-          showNotification('error', error.error || error.message || 'Failed to add medicine');
-        }
+        showNotification('error', error.error || error.message || 'Failed to add medicine');
       }
     } catch (error) {
       console.error('Error adding medicine:', error);
@@ -149,11 +135,6 @@ export default function MedicineDashboard() {
       return;
     }
 
-    if (!formData.srNumber.trim() || !formData.name.trim()) {
-      showNotification('error', 'SR Number and Medicine Name cannot be empty');
-      return;
-    }
-
     try {
       const cleanData = {
         srNumber: formData.srNumber.trim(),
@@ -163,8 +144,6 @@ export default function MedicineDashboard() {
         category: formData.category.trim() || null,
         expirationDate: formData.expirationDate || null
       };
-
-      console.log('Updating medicine:', JSON.stringify(cleanData, null, 2));
 
       const response = await fetch(`${API_BASE}/${editingMedicine.id}`, {
         method: 'PUT',
@@ -177,18 +156,11 @@ export default function MedicineDashboard() {
         setShowEditModal(false);
         setEditingMedicine(null);
         resetForm();
-        await fetchMedicines();
-        await fetchSummary();
+        fetchMedicines();
+        fetchSummary();
       } else {
         const error = await response.json();
-        console.error('Server error response:', error);
-        
-        // Check for duplicate SR Number error
-        if (error.error && error.error.includes('unique')) {
-          showNotification('error', 'SR Number already exists. Please use a different SR Number.');
-        } else {
-          showNotification('error', error.error || error.message || 'Failed to update medicine');
-        }
+        showNotification('error', error.error || error.message || 'Failed to update medicine');
       }
     } catch (error) {
       console.error('Error updating medicine:', error);

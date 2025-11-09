@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Package, TrendingUp, AlertTriangle, CheckCircle, XCircle, Clock, Calendar, LogOut, MessageSquare } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8080/api';
+const API_BASE = `${import.meta.env.VITE_API_BASE_URL}/api`;
+
 
 const getCurrentUser = () => {
   return localStorage.getItem('username') || 'Officer User';

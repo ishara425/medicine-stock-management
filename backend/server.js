@@ -27,39 +27,50 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 dotenv.config();
 
 const app = express();
-app.use(cors());
+
+// -----------------------------
+// CORS Setup
+// -----------------------------
+const allowedOrigins = [
+  'https://purple-plant-0bd14e000.3.azurestaticapps.net', // your frontend URL
+  'http://localhost:5173' // optional: local frontend for testing
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // allow Postman or curl
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('CORS policy: This origin is not allowed'));
+    }
+  },
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  credentials: true
+}));
+
 app.use(express.json());
 
 // -----------------------------
 // Define Sequelize Associations
 // -----------------------------
-
-// ✅ IMPORTANT: All belongsTo associations are already defined in model files
-// We only define hasMany/hasOne reverse associations here to avoid duplicates
-
-// Distribution reverse relationships
 User.hasMany(Distribution, { foreignKey: "officerId", as: "distributions" });
 Medicine.hasMany(Distribution, { foreignKey: "medicineId", as: "medicineDistributions" });
 
-// Stock reverse relationships  
 Medicine.hasMany(Stock, { foreignKey: "medicineId", as: "stocks" });
 
-// Notification reverse relationships
 User.hasMany(Notification, { foreignKey: "officerId", as: "receivedNotifications" });
 User.hasMany(Notification, { foreignKey: "createdBy", as: "createdNotifications" });
 Medicine.hasMany(Notification, { foreignKey: "medicineId", as: "notifications" });
 Distribution.hasMany(Notification, { foreignKey: "distributionId", as: "notifications" });
 
-// Officer Inventory reverse relationships
 User.hasMany(OfficerInventory, { foreignKey: "officerId", as: "inventories" });
 Medicine.hasMany(OfficerInventory, { foreignKey: "medicineId", as: "officerInventories" });
 
-// Restock Request reverse relationships
 User.hasMany(RestockRequest, { foreignKey: "officerId", as: "restockRequests" });
 User.hasMany(RestockRequest, { foreignKey: "reviewedBy", as: "reviewedRequests" });
 Medicine.hasMany(RestockRequest, { foreignKey: "medicineId", as: "restockRequests" });
 
-// Daily Usage reverse relationships
 OfficerInventory.hasMany(DailyUsage, { foreignKey: "inventoryId", as: "usageHistory" });
 
 // -----------------------------
@@ -69,13 +80,11 @@ const connectDB = async () => {
   try {
     await sequelize.authenticate();
     console.log("✅ MySQL connection established via Sequelize!");
-
-    // Sync all models (alter=true updates tables without dropping)
     await sequelize.sync({ alter: true });
     console.log("✅ All models synchronized successfully!");
   } catch (error) {
     console.error("❌ Database connection failed:", error.message);
-    process.exit(1); // Exit if database connection fails
+    process.exit(1);
   }
 };
 

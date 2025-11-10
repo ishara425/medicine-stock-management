@@ -22,7 +22,7 @@ const sequelize = new Sequelize(
     dialectOptions: {
       ssl: {
         // Your Azure MySQL certificate
-        ca: fs.readFileSync(path.join(process.cwd(), "backend/certs/DigiCertGlobalRootG2.crt.pem"))
+        ca: fs.readFileSync(path.join(process.cwd(), "certs/DigiCertGlobalRootG2.crt.pem"))
       }
     },
     pool: {

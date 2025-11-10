@@ -34,7 +34,7 @@ const sequelize = new Sequelize(
 
 // Test connection
 sequelize.authenticate()
-  .then(() => console.log('✅ Database connected'))
-  .catch(err => console.error('❌ DB Error:', err.message));
+  .then(() => console.log(' Database connected'))
+  .catch(err => console.error(' DB Error:', err.message));
 
 export default sequelize;

@@ -1,8 +1,6 @@
 // backend/config/db.js
 import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
-import fs from "fs";
-import path from "path";
 
 dotenv.config();
 
@@ -21,8 +19,8 @@ const sequelize = new Sequelize(
     port: process.env.DB_PORT || 3306,
     dialectOptions: {
       ssl: {
-        // Your Azure MySQL certificate
-        ca: fs.readFileSync(path.join(process.cwd(), "certs/DigiCertGlobalRootG2.crt.pem"))
+        require: true,            // Enforce SSL connection
+        rejectUnauthorized: true  // Validate the server certificate
       }
     },
     pool: {
@@ -37,7 +35,7 @@ const sequelize = new Sequelize(
 
 // Test connection
 sequelize.authenticate()
-  .then(() => console.log(' Database connected via SSL!'))
+  .then(() => console.log('Database connected via SSL!'))
   .catch(err => console.error('DB Error:', err.message));
 
 export default sequelize;

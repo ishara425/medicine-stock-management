@@ -1,9 +1,12 @@
+// backend/config/db.js
 import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
 
-// Automatically format username for Azure MySQL
+// Format username for Azure MySQL
 const dbUser = process.env.DB_USER.includes('@') 
   ? process.env.DB_USER 
   : `${process.env.DB_USER}@${process.env.DB_HOST.split('.')[0]}`;
@@ -18,8 +21,8 @@ const sequelize = new Sequelize(
     port: process.env.DB_PORT || 3306,
     dialectOptions: {
       ssl: {
-        require: true,
-        rejectUnauthorized: true
+        // Your Azure MySQL certificate
+        ca: fs.readFileSync(path.join(process.cwd(), "backend/certs/DigiCertGlobalRootG2.crt.pem"))
       }
     },
     pool: {
@@ -34,7 +37,7 @@ const sequelize = new Sequelize(
 
 // Test connection
 sequelize.authenticate()
-  .then(() => console.log(' Database connected'))
-  .catch(err => console.error(' DB Error:', err.message));
+  .then(() => console.log(' Database connected via SSL!'))
+  .catch(err => console.error('DB Error:', err.message));
 
 export default sequelize;

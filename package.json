@@ -6,10 +6,6 @@
     "start": "cd backend && npm install && npm start",
     "dev": "cd frontend && npm run dev",
     "install-all": "npm install --prefix backend && npm install --prefix frontend"
-  },
-  "devDependencies": {
-    "autoprefixer": "^10.4.21",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.18"
   }
+  
 }

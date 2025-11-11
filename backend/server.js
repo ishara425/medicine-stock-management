@@ -33,7 +33,7 @@ const app = express();
 // -----------------------------
 app.use(cors({
   origin: [
-    'https://purple-plant-0bd14e000.3.azurestaticapps.net',  // Your frontend URL
+    'https://blue-forest-062f3d800.3.azurestaticapps.net',  // Your frontend URL
     'http://localhost:3000',
     'http://localhost:5173'
   ],

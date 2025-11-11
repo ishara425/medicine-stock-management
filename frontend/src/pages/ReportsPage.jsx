@@ -611,10 +611,7 @@ const ReportsPage = () => {
 
           {/* System Insights */}
           <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl shadow-md p-8 border border-blue-200">
-            <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
-              <FiCheckCircle className="text-blue-600" />
-              Automated System Insights & Recommendations
-            </h3>
+            
             <div className="space-y-4">
               {overviewData?.acceptanceRate < 80 && (
                 <InsightCard

@@ -24,7 +24,7 @@ const Sidebar = () => {
           </div>
           <div>
             <h1 className="text-lg font-semibold">Medicine Tracker</h1>
-            <p className="text-xs text-blue-300">PHI System</p>
+            
           </div>
         </div>
       </div>
@@ -57,7 +57,7 @@ const Sidebar = () => {
       <div className="p-4 border-t border-blue-800">
         <div className="text-xs text-blue-300">
           <div>Ministry of Health</div>
-          <div>Medicine Tracking System v2.0</div>
+          <div>Medicine Tracking System </div>
         </div>
       </div>
     </div>

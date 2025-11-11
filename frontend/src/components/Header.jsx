@@ -11,13 +11,13 @@ const Header = ({ title, subtitle }) => {
     navigate('/login');
   };
 
-  const username = localStorage.getItem('username') || 'PHI User';
+  const username = localStorage.getItem('username') ;
 
   return (
     <header className="bg-white border-b px-8 py-4 flex justify-between items-center">
       <div>
         <h1 className="text-2xl font-semibold text-gray-800">{title || 'Medicine Tracker'}</h1>
-        <p className="text-sm text-gray-500">{subtitle || 'Public Health Inspector Dashboard'}</p>
+        <p className="text-sm text-gray-500">{subtitle || 'Admin Dashboard'}</p>
       </div>
       <div className="flex items-center gap-4">
         <span className="text-sm text-gray-600">Welcome, {username}</span>

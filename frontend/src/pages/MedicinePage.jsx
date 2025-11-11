@@ -10,7 +10,7 @@ const MedicinePage = () => {
       <div className="flex-1 ml-64">
         <Header 
           title="Medicine Tracker" 
-          subtitle="Public Health Inspector Dashboard" 
+          
         />
         <MedicineDashboard />
       </div>

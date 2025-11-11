@@ -30,18 +30,40 @@ jobs:
         with:
           node-version: '22.x'
 
-      # Step 3: Install dependencies
+      # Step 3: Install dependencies in frontend
       - name: Install NPM Packages
         working-directory: ./frontend
         run: npm install
 
-      # Step 4: Build and Deploy
+      # Step 4: Get GitHub Id Token (required if SWA is private)
+      - name: Get Id Token
+        uses: actions/github-script@v6
+        id: idtoken
+        with:
+          script: |
+            const core = require('@actions/core')
+            return await core.getIDToken()
+          result-encoding: string
+
+      # Step 5: Build and Deploy to Azure SWA
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_BLUE_FOREST_062F3D800 }}
-          action: "build"                # Use "build" so Oryx respects Node 22
-          app_location: "./frontend"     
-          api_location: ""              
-          output_location: "dist"       
+          action: "build"                   # REQUIRED
+          app_location: "./frontend"        # React app folder
+          api_location: ""                  # Empty if no backend API
+          output_location: "dist"           # Vite build output
+          github_id_token: ${{ steps.idtoken.outputs.result }}
+
+  close_pull_request_job:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close Pull Request Job
+    steps:
+      - name: Close Pull Request
+        id: closepullrequest
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          action: "close"

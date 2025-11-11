@@ -1,0 +1,4 @@
+{
+    "appService.defaultWebAppToDeploy": "/subscriptions/42aaef91-c933-4834-a12b-d33a98c8f702/resourceGroups/medical-stock-rg/providers/Microsoft.Web/sites/medstock-backend",
+    "appService.deploySubpath": "."
+}

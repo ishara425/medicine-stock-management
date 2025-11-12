@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom'; // ✅ මේක add කරන්න
 import { User, Lock, Pill, Activity, Heart, Shield } from 'lucide-react';
 
 export default function LoginPage() {
+  const navigate = useNavigate(); // ✅ Hook එක declare කරන්න
+  
   const [formData, setFormData] = useState({
     username: '',
     password: ''
@@ -45,6 +48,7 @@ export default function LoginPage() {
         console.log('Login successful:', data);
         console.log('User role:', data.role);
 
+        // Navigate based on role
         if (data.role === 'OFFICER') {
           navigate('/officer/dashboard', { replace: true });
         } else {

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // ✅ මේක add කරන්න
+import { useNavigate } from 'react-router-dom';
 import { User, Lock, Pill, Activity, Heart, Shield } from 'lucide-react';
 
 export default function LoginPage() {
-  const navigate = useNavigate(); // ✅ Hook එක declare කරන්න
+  const navigate = useNavigate(); 
   
   const [formData, setFormData] = useState({
     username: '',
@@ -188,9 +188,7 @@ export default function LoginPage() {
             <h2 className="text-3xl font-bold text-gray-800 mt-8 text-center">
               Medicine Management System
             </h2>
-            <p className="text-gray-600 mt-4 text-center text-lg">
-              Secure • Efficient • Reliable
-            </p>
+           
           </div>
         </div>
 
@@ -201,7 +199,7 @@ export default function LoginPage() {
               <Pill className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              MedExplorer
+              MedTracker
             </h1>
           </div>
 
@@ -277,17 +275,7 @@ export default function LoginPage() {
             <p className="text-center text-sm text-gray-500">
               Medicine Management System
             </p>
-            <div className="flex justify-center gap-4 mt-2 text-xs text-gray-400">
-              <span className="flex items-center gap-1">
-                <Shield className="w-3 h-3" /> Secure
-              </span>
-              <span className="flex items-center gap-1">
-                <Activity className="w-3 h-3" /> Efficient
-              </span>
-              <span className="flex items-center gap-1">
-                <Heart className="w-3 h-3" /> Reliable
-              </span>
-            </div>
+           \
           </div>
         </div>
       </div>
